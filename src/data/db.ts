@@ -169,6 +169,15 @@ export class DataStore {
     return this.tag ?? "unknown";
   }
 
+  /** Look up an indexed repo (e.g. "onedr0p/home-ops") to resolve its clone URL + branch. */
+  getRepoByName(repoName: string): { url: string; branch: string | null } | null {
+    const row = this.require()
+      .prepare("select url, branch from repo where repo_name = ?")
+      .get(repoName) as { url: string | null; branch: string | null } | undefined;
+    if (!row || !row.url) return null;
+    return { url: row.url, branch: row.branch };
+  }
+
   /** Fetch and parse `spec.values` JSON for a set of file URLs. */
   getValues(urls: string[]): Map<string, unknown> {
     const out = new Map<string, unknown>();

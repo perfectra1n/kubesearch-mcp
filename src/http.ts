@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { Config } from "./config.js";
 import type { DataStore } from "./data/db.js";
+import type { RepoStore } from "./repo/clone.js";
 import { buildServer } from "./server.js";
 import { log } from "./util/log.js";
 
@@ -39,7 +40,7 @@ async function readBody(req: http.IncomingMessage): Promise<unknown> {
  * Start a Streamable HTTP MCP server with in-memory session management, the
  * transport shape standard MCP clients (Claude Code/Desktop) expect over HTTP.
  */
-export function startHttp(cfg: Config, store: DataStore): Promise<http.Server> {
+export function startHttp(cfg: Config, store: DataStore, repos: RepoStore): Promise<http.Server> {
   const transports = new Map<string, StreamableHTTPServerTransport>();
 
   async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
@@ -104,7 +105,7 @@ export function startHttp(cfg: Config, store: DataStore): Promise<http.Server> {
     transport.onclose = () => {
       if (transport.sessionId) transports.delete(transport.sessionId);
     };
-    const server = buildServer(store);
+    const server = buildServer(store, repos);
     await server.connect(transport);
     await transport.handleRequest(req, res, body);
   }

@@ -1,22 +1,34 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerAllTools } from "./tools/index.js";
+import { registerRepoTools, registerSearchTools } from "./tools/index.js";
+import { registerPrompts } from "./prompts/index.js";
 import type { DataStore } from "./data/db.js";
+import type { RepoStore } from "./repo/clone.js";
 
-const INSTRUCTIONS = `kubesearch-mcp exposes kubesearch.dev — a search engine over Flux HelmReleases and
-Argo Applications across hundreds of public "home-ops" Kubernetes Git repositories.
+function instructions(cloneEnabled: boolean): string {
+  return (
+    `kubesearch-mcp exposes kubesearch.dev — a search engine over Flux HelmReleases and Argo Applications across ` +
+    `hundreds of public "home-ops" Kubernetes Git repositories.\n\n` +
+    `Use it to discover how the community deploys software on Kubernetes:\n` +
+    `- kubesearch_search_releases: find charts by name and see who deploys them.\n` +
+    `- kubesearch_get_release: drill into one chart for every deployment and its values.\n` +
+    `- kubesearch_search_images: find container image repositories and the tags used in the wild.\n` +
+    `- kubesearch_grep_values: full-text grep across real-world Helm values for config examples.\n` +
+    `- kubesearch_status: check how fresh the cached data is.\n` +
+    (cloneEnabled
+      ? `- repo_clone / repo_list_files / repo_read_file / repo_grep / repo_cleanup: temporarily clone a repo to review its actual manifests.\n`
+      : "") +
+    `\nThe prompts (e.g. kubesearch_compare_deployments) chain these tools into useful workflows.`
+  );
+}
 
-Use it to discover how the community deploys software on Kubernetes:
-- search_helm_releases: find charts by name and see who deploys them.
-- get_helm_release: drill into one chart for every deployment and its values.
-- search_images: find container image repositories and the tags used in the wild.
-- grep_values: full-text grep across real-world Helm values for config examples.
-- kubesearch_status: check how fresh the cached data is.`;
-
-export function buildServer(store: DataStore): McpServer {
+export function buildServer(store: DataStore, repos: RepoStore): McpServer {
+  const cloneEnabled = repos.enabled;
   const server = new McpServer(
     { name: "kubesearch-mcp", version: "0.1.0" },
-    { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
+    { capabilities: { tools: {}, prompts: {} }, instructions: instructions(cloneEnabled) },
   );
-  registerAllTools(server, store);
+  registerSearchTools(server, store);
+  if (cloneEnabled) registerRepoTools(server, repos);
+  registerPrompts(server, { cloneEnabled });
   return server;
 }

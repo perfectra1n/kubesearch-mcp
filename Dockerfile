@@ -21,6 +21,12 @@ RUN npm run build \
 # ---- runtime stage ----
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
+
+# `git` is required by the repo_clone tools; ca-certificates for TLS.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 ENV NODE_ENV=production \
     MCP_TRANSPORT=http \
     MCP_HTTP_HOST=0.0.0.0 \
