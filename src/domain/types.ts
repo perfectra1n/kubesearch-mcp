@@ -44,3 +44,33 @@ export interface ImageEntry {
   usageCount: number;
   fileUrls: string[];
 }
+
+/** One frequently-set value path across a chart's deployments. */
+export interface CommonSetting {
+  /** Key path with array indices collapsed, e.g. `server.route.hostnames[]`. */
+  path: string;
+  /** How many analyzed deployments set this path. */
+  setBy: number;
+  /** `setBy` as a percentage of analyzed deployments (rounded integer). */
+  setPct: number;
+  /** Most common distinct values, with their counts (capped). */
+  values: Array<{ value: string; count: number }>;
+  /** Total number of distinct values seen for this path. */
+  distinctValues: number;
+}
+
+/** One real-world example configuration for a chart. */
+export interface ValuesExample {
+  repo: string;
+  stars: number;
+  chartVersion: string | null;
+  fileUrl: string;
+  values: unknown;
+}
+
+/** Aggregated view of how a chart is configured across its deployments. */
+export interface ValuesSummary {
+  analyzedDeployments: number;
+  commonSettings: CommonSetting[];
+  examples: ValuesExample[];
+}

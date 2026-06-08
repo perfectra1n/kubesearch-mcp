@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flatten, walkObjects } from "../src/util/jsonWalk.js";
+import { flatten, projectPaths, walkObjects } from "../src/util/jsonWalk.js";
 import { makeSnippet } from "../src/util/snippet.js";
 import { grepSearchUrl, imageSearchUrl } from "../src/util/links.js";
 
@@ -21,6 +21,42 @@ describe("walkObjects", () => {
       if (typeof o.repository === "string") seen.push(o.repository);
     });
     expect(seen.sort()).toEqual(["r", "r2"]);
+  });
+});
+
+describe("projectPaths", () => {
+  const obj = {
+    server: { persistentVolume: { size: "20Gi", enabled: true }, retentionPeriod: "14d" },
+    dashboards: { enabled: true },
+  };
+
+  it("keeps the whole subtree at a requested path", () => {
+    expect(projectPaths(obj, ["server.persistentVolume"])).toEqual({
+      server: { persistentVolume: { size: "20Gi", enabled: true } },
+    });
+  });
+
+  it("prunes siblings while keeping the requested leaf", () => {
+    expect(projectPaths(obj, ["server.retentionPeriod"])).toEqual({
+      server: { retentionPeriod: "14d" },
+    });
+  });
+
+  it("supports multiple paths across branches", () => {
+    expect(projectPaths(obj, ["server.retentionPeriod", "dashboards"])).toEqual({
+      server: { retentionPeriod: "14d" },
+      dashboards: { enabled: true },
+    });
+  });
+
+  it("keeps an ancestor key whole", () => {
+    expect(projectPaths(obj, ["server"])).toEqual({ server: obj.server });
+  });
+
+  it("returns {} for a missing path or empty input", () => {
+    expect(projectPaths(obj, ["nope.nothing"])).toEqual({});
+    expect(projectPaths(obj, [])).toEqual({});
+    expect(projectPaths(null, ["server"])).toEqual({});
   });
 });
 

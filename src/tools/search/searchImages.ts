@@ -30,6 +30,7 @@ export function registerSearchImages(server: McpServer, store: DataStore): void 
             tag_count: z.number(),
             usage_count: z.number(),
             sample_repos: z.array(z.string()),
+            repo_count: z.number().describe("Total distinct repos using this image; sample_repos shows up to 10."),
           }),
         ),
       },
@@ -45,13 +46,17 @@ export function registerSearchImages(server: McpServer, store: DataStore): void 
         total_matches: total,
         shown: entries.length,
         image_url: imageSearchUrl(query),
-        results: entries.map((e) => ({
-          repository: e.repository,
-          tags: e.tags.slice(0, 25),
-          tag_count: e.tags.length,
-          usage_count: e.usageCount,
-          sample_repos: uniq(e.fileUrls.map((u) => releaseIndex.urlMeta.get(u)?.repo).filter((r): r is string => !!r)).slice(0, 10),
-        })),
+        results: entries.map((e) => {
+          const repos = uniq(e.fileUrls.map((u) => releaseIndex.urlMeta.get(u)?.repo).filter((r): r is string => !!r));
+          return {
+            repository: e.repository,
+            tags: e.tags.slice(0, 25),
+            tag_count: e.tags.length,
+            usage_count: e.usageCount,
+            sample_repos: repos.slice(0, 10),
+            repo_count: repos.length,
+          };
+        }),
       });
     },
   );

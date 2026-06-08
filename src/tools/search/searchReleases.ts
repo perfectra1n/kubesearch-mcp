@@ -41,6 +41,7 @@ export function registerSearchReleases(server: McpServer, store: DataStore): voi
                 file_url: z.string(),
               }),
             ),
+            more_repos: z.number().describe("Deployments beyond the shown top_repos — fetch them with kubesearch_get_release."),
           }),
         ),
       },
@@ -68,6 +69,7 @@ export function registerSearchReleases(server: McpServer, store: DataStore): voi
             namespace: d.namespace,
             file_url: d.fileUrl,
           })),
+          more_repos: Math.max(0, g.deploymentCount - 10),
         })),
       });
     },

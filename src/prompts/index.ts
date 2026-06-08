@@ -26,9 +26,11 @@ export function registerPrompts(server: McpServer, opts: { cloneEnabled: boolean
       userPrompt(
         `Compare how popular home-ops repositories deploy the "${chart}" Helm chart.\n\n` +
           `1. Call kubesearch_search_releases with query "${chart}" and note the top result ids (most-deployed first).\n` +
-          `2. For the top 2-3 ids, call kubesearch_get_release with include_values: true.\n` +
-          `3. Summarize how their spec.values differ (versions, key settings, resource limits, ingress, persistence) ` +
-          `and call out notable or unusual configuration choices.\n` +
+          `2. For the top 2-3 ids, call kubesearch_get_release (default view: "summary") to get the community config ` +
+          `digest — the most commonly-set spec.values paths, their typical values, and a couple of example configs.\n` +
+          `3. Compare those digests: versions, key settings, resource limits, ingress, persistence; call out notable or ` +
+          `unusual choices. Only when a difference needs detail, drill in with kubesearch_get_release view: "values" ` +
+          `(narrow with repo and/or value_paths) instead of pulling every deployment's full values.\n` +
           `4. Recommend a sensible baseline configuration, citing the source repos and their kubesearch.dev links.`,
         `Compare deployments of ${chart}`,
       ),
@@ -46,7 +48,9 @@ export function registerPrompts(server: McpServer, opts: { cloneEnabled: boolean
         `I want to deploy "${chart}" on my Flux-managed Kubernetes cluster the way the community does.\n\n` +
           `1. Use kubesearch_search_releases for "${chart}" to find the most common chart source (OCI/HelmRepository) ` +
           `and the most-used release id.\n` +
-          `2. Use kubesearch_get_release (include_values: true) on the top id to see real configurations.\n` +
+          `2. Use kubesearch_get_release (default view: "summary") on the top id to see the common settings and a couple ` +
+          `of real example configs. If you need a full reference config, drill in with view: "values" (narrow with ` +
+          `repo and/or value_paths) rather than dumping every deployment.\n` +
           `3. Draft a clean HelmRelease (and HelmRepository/OCIRepository if needed) with sensible values, ` +
           `explaining each non-default choice and linking the source repos you based it on.`,
         `Adopt ${chart}`,

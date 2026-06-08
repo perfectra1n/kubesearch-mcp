@@ -13,7 +13,7 @@ clone a repo so the model can review its actual manifests.
 | Tool | kubesearch.dev equivalent | What it does |
 | --- | --- | --- |
 | `kubesearch_search_releases` | `/#cert-manager` | Find charts by name; see who deploys them, ranked by popularity. |
-| `kubesearch_get_release` | `/hr/<id>` | Every deployment of one chart, optionally with each repo's `spec.values`. |
+| `kubesearch_get_release` | `/hr/<id>` | One chart's deployments. `view: "summary"` (default) digests the common `spec.values`; `view: "deployments"` paginates the repo list; `view: "values"` drills into a repo's full config. |
 | `kubesearch_search_images` | `/image#image cert-manager` | Container image repositories and the tags used in the wild. |
 | `kubesearch_grep_values` | `/grep#grep cert-manager.io` | Full-text grep across real-world Helm values for config examples. |
 | `kubesearch_status` | — | Report the cached data's release date and row counts. |
