@@ -1,0 +1,21 @@
+services:
+  kubesearch-mcp:
+    build: .
+    # image: ghcr.io/perfectra1n/kubesearch-mcp:latest  # or pull a published image
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      MCP_TRANSPORT: http
+      MCP_HTTP_HOST: 0.0.0.0
+      MCP_HTTP_PORT: "3000"
+      KUBESEARCH_REFRESH_HOURS: "24"
+      # Strongly recommended so background refreshes aren't rate-limited:
+      # GITHUB_TOKEN: ${GITHUB_TOKEN}
+      # Require a bearer token on every request (uncomment to enable auth):
+      # MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN}
+    volumes:
+      - kubesearch-data:/data
+
+volumes:
+  kubesearch-data:

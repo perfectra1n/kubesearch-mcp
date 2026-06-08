@@ -1,5 +1,7 @@
 import http from "node:http";
+import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { Config } from "./config.js";
 import type { DataStore } from "./data/db.js";
 import { buildServer } from "./server.js";
@@ -7,36 +9,38 @@ import { log } from "./util/log.js";
 
 function setCors(res: http.ServerResponse): void {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID");
   res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
 }
 
-function unauthorized(res: http.ServerResponse): void {
-  res.writeHead(401, { "Content-Type": "application/json", "WWW-Authenticate": "Bearer" });
-  res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32001, message: "Unauthorized" }, id: null }));
+function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(body));
+}
+
+function rpcError(res: http.ServerResponse, status: number, code: number, message: string): void {
+  sendJson(res, status, { jsonrpc: "2.0", error: { code, message }, id: null });
 }
 
 function isAuthorized(cfg: Config, req: http.IncomingMessage): boolean {
   if (!cfg.authToken) return true;
-  const header = req.headers["authorization"];
-  return typeof header === "string" && header === `Bearer ${cfg.authToken}`;
+  return req.headers["authorization"] === `Bearer ${cfg.authToken}`;
+}
+
+async function readBody(req: http.IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  if (chunks.length === 0) return undefined;
+  return JSON.parse(Buffer.concat(chunks).toString("utf-8"));
 }
 
 /**
- * Start a Streamable HTTP MCP server using stateless per-request transports
- * (ideal for a read-only, horizontally-scalable container deployment).
+ * Start a Streamable HTTP MCP server with in-memory session management, the
+ * transport shape standard MCP clients (Claude Code/Desktop) expect over HTTP.
  */
 export function startHttp(cfg: Config, store: DataStore): Promise<http.Server> {
-  const httpServer = http.createServer((req, res) => {
-    void handle(req, res).catch((err) => {
-      log(`http handler error: ${(err as Error).message}`);
-      if (!res.headersSent) {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32603, message: "Internal error" }, id: null }));
-      }
-    });
-  });
+  const transports = new Map<string, StreamableHTTPServerTransport>();
 
   async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     setCors(res);
@@ -48,35 +52,69 @@ export function startHttp(cfg: Config, store: DataStore): Promise<http.Server> {
       return;
     }
     if (url.pathname === "/healthz" || url.pathname === "/") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", tag: store.currentTag }));
+      sendJson(res, 200, { status: "ok", tag: store.currentTag });
       return;
     }
     if (url.pathname !== "/mcp") {
-      res.writeHead(404, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32601, message: "Not found" }, id: null }));
+      rpcError(res, 404, -32601, "Not found");
       return;
     }
     if (!isAuthorized(cfg, req)) {
-      unauthorized(res);
-      return;
-    }
-    if (req.method !== "POST") {
-      res.writeHead(405, { "Content-Type": "application/json", Allow: "POST" });
-      res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed; use POST" }, id: null }));
+      res.setHeader("WWW-Authenticate", "Bearer");
+      rpcError(res, 401, -32001, "Unauthorized");
       return;
     }
 
-    // Stateless: a fresh server + transport per request.
-    const server = buildServer(store);
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-    res.on("close", () => {
-      void transport.close();
-      void server.close();
+    const sessionId = req.headers["mcp-session-id"];
+    const existing = typeof sessionId === "string" ? transports.get(sessionId) : undefined;
+
+    if (req.method === "GET" || req.method === "DELETE") {
+      // SSE stream resumption / session termination — must reference a live session.
+      if (!existing) {
+        rpcError(res, 400, -32000, "Unknown or missing session id");
+        return;
+      }
+      await existing.handleRequest(req, res);
+      return;
+    }
+    if (req.method !== "POST") {
+      res.writeHead(405, { Allow: "GET, POST, DELETE" });
+      res.end();
+      return;
+    }
+
+    const body = await readBody(req);
+
+    if (existing) {
+      await existing.handleRequest(req, res, body);
+      return;
+    }
+    if (!isInitializeRequest(body)) {
+      rpcError(res, 400, -32000, "No valid session id; send an initialize request first");
+      return;
+    }
+
+    // New session: build a server + transport and register on initialize.
+    const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (sid: string) => {
+        transports.set(sid, transport);
+      },
     });
+    transport.onclose = () => {
+      if (transport.sessionId) transports.delete(transport.sessionId);
+    };
+    const server = buildServer(store);
     await server.connect(transport);
-    await transport.handleRequest(req, res);
+    await transport.handleRequest(req, res, body);
   }
+
+  const httpServer = http.createServer((req, res) => {
+    void handle(req, res).catch((err) => {
+      log(`http handler error: ${(err as Error).message}`);
+      if (!res.headersSent) rpcError(res, 500, -32603, "Internal error");
+    });
+  });
 
   return new Promise((resolve) => {
     httpServer.listen(cfg.port, cfg.host, () => {

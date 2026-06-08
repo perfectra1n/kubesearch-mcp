@@ -27,8 +27,9 @@ describe("walkObjects", () => {
 describe("makeSnippet", () => {
   it("centers on the match with ellipses", () => {
     const snip = makeSnippet("the quick brown fox jumps over the lazy dog", "fox", 5);
-    expect(snip).toContain("fox");
-    expect(snip.startsWith("…")).toBe(true);
+    expect(snip).not.toBeNull();
+    expect(snip!).toContain("fox");
+    expect(snip!.startsWith("…")).toBe(true);
   });
   it("returns null when not found", () => {
     expect(makeSnippet("abc", "xyz")).toBeNull();
