@@ -12,8 +12,8 @@ export interface Config {
   host: string;
   /** HTTP listen port (http transport only). */
   port: number;
-  /** Optional bearer token required on HTTP requests when set. */
-  authToken: string | undefined;
+  /** Accepted bearer tokens (HTTP transport). Empty means auth is disabled. */
+  authTokens: string[];
   /** Directory where the downloaded SQLite databases are cached. */
   cacheDir: string;
   /** How long (ms) a cached database is trusted before re-checking for a newer release. */
@@ -85,6 +85,15 @@ function parseListEnv(value: string | undefined): string[] {
     .filter((s) => s !== "");
 }
 
+/** Like parseListEnv but case-preserving — bearer tokens are case-sensitive. */
+function parseTokensEnv(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const refreshHours = parseIntEnv(env.KUBESEARCH_REFRESH_HOURS, 24);
   // 0 (or negative) disables refreshing: cached data is used forever once present.
@@ -109,7 +118,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     transport: parseTransport(env.MCP_TRANSPORT),
     host: env.MCP_HTTP_HOST ?? "0.0.0.0",
     port: parseIntEnv(env.MCP_HTTP_PORT ?? env.PORT, 3000),
-    authToken: env.MCP_AUTH_TOKEN && env.MCP_AUTH_TOKEN.trim() !== "" ? env.MCP_AUTH_TOKEN : undefined,
+    authTokens: parseTokensEnv(env.MCP_AUTH_TOKEN),
     cacheDir,
     refreshTtlMs: (autoRefresh ? refreshHours : 24) * 60 * 60 * 1000,
     autoRefresh,

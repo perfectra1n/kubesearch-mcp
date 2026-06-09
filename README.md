@@ -155,7 +155,8 @@ All configuration is via environment variables:
 | `MCP_TRANSPORT` | `stdio` (`http` in Docker) | `stdio` or `http`. |
 | `MCP_HTTP_HOST` | `0.0.0.0` | HTTP bind host (http transport). |
 | `MCP_HTTP_PORT` / `PORT` | `3000` | HTTP listen port (http transport). |
-| `MCP_AUTH_TOKEN` | _(unset)_ | If set, every HTTP request must send `Authorization: Bearer <token>`. |
+| `MCP_AUTH_TOKEN` | _(unset)_ | If set, every HTTP request must send `Authorization: Bearer <token>`. Accepts a single token or a comma-separated list of accepted tokens (e.g. one per client). |
+| `LOG_LEVEL` | `info` | Minimum log severity to emit: `debug`, `info`, `warn`, or `error`. All logs go to stderr. |
 | `KUBESEARCH_CACHE_DIR` | `~/.cache/kubesearch-mcp` (`/data` in Docker) | Where the SQLite databases are cached. |
 | `KUBESEARCH_REFRESH_HOURS` | `24` | How often to check for a newer daily release. `0` disables refresh (use cache forever). |
 | `GITHUB_TOKEN` | _(unset)_ | Lifts the GitHub API rate limit (60→5000/hr) used to resolve the latest release. Recommended. |

@@ -25,8 +25,9 @@ function rpcError(res: http.ServerResponse, status: number, code: number, messag
 }
 
 function isAuthorized(cfg: Config, req: http.IncomingMessage): boolean {
-  if (!cfg.authToken) return true;
-  return req.headers["authorization"] === `Bearer ${cfg.authToken}`;
+  if (cfg.authTokens.length === 0) return true;
+  const header = req.headers["authorization"];
+  return cfg.authTokens.some((token) => header === `Bearer ${token}`);
 }
 
 async function readBody(req: http.IncomingMessage): Promise<unknown> {
@@ -61,6 +62,7 @@ export function startHttp(cfg: Config, store: DataStore, repos: RepoStore): Prom
       return;
     }
     if (!isAuthorized(cfg, req)) {
+      log.warn(`unauthorized ${req.method} ${url.pathname} from ${req.socket.remoteAddress ?? "unknown"}`);
       res.setHeader("WWW-Authenticate", "Bearer");
       rpcError(res, 401, -32001, "Unauthorized");
       return;
@@ -111,15 +113,27 @@ export function startHttp(cfg: Config, store: DataStore, repos: RepoStore): Prom
   }
 
   const httpServer = http.createServer((req, res) => {
+    const start = performance.now(); // monotonic — immune to wall-clock skew
+    const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
+    // Skip access logs for health checks and CORS preflight — pure noise.
+    const skipAccessLog = req.method === "OPTIONS" || pathname === "/healthz" || pathname === "/";
+    if (!skipAccessLog) {
+      res.on("finish", () => {
+        const sid = req.headers["mcp-session-id"];
+        const session = typeof sid === "string" ? ` session=${sid}` : "";
+        log.info(`${req.method} ${pathname} -> ${res.statusCode} (${Math.round(performance.now() - start)}ms)${session}`);
+      });
+    }
     void handle(req, res).catch((err) => {
-      log(`http handler error: ${(err as Error).message}`);
+      log.error(`http handler error: ${(err as Error).message}`);
       if (!res.headersSent) rpcError(res, 500, -32603, "Internal error");
     });
   });
 
   return new Promise((resolve) => {
     httpServer.listen(cfg.port, cfg.host, () => {
-      log(`kubesearch-mcp HTTP listening on http://${cfg.host}:${cfg.port}/mcp (auth ${cfg.authToken ? "on" : "off"})`);
+      const auth = cfg.authTokens.length === 0 ? "off" : `on (${cfg.authTokens.length} token${cfg.authTokens.length === 1 ? "" : "s"})`;
+      log(`kubesearch-mcp HTTP listening on http://${cfg.host}:${cfg.port}/mcp (auth ${auth})`);
       resolve(httpServer);
     });
   });
