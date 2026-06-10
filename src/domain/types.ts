@@ -6,6 +6,14 @@ export interface Deployment {
   namespace: string | null;
   chartVersion: string | null;
   chartSourceUrl: string;
+  /** Raw, un-normalized chart source url (OCIRepository/HelmRepository/Argo) before mergeHelmURL collapses it. */
+  sourceUrl: string;
+  /** Source resource kind: OCIRepository | HelmRepository | GitRepository | Argo | null. */
+  sourceKind: string | null;
+  /** OCIRepository `spec.ref.tag` (the pulled chart version); null for non-OCI sources. */
+  sourceTag: string | null;
+  /** Real chart name derived from the OCI url when it differs from `chart` (e.g. app-template); else null. */
+  resolvedChart: string | null;
   helmRepoName: string;
   repo: string;
   repoUrl: string | null;
@@ -21,6 +29,12 @@ export interface ReleaseGroup {
   id: string;
   chart: string;
   chartSourceUrl: string;
+  /** Distinct raw source urls across this group's deployments (capped at 5). */
+  sourceUrls: string[];
+  /** The real chart name when all deployments agree; null otherwise. */
+  resolvedChart: string | null;
+  /** True when `chartSourceUrl` collapses >1 distinct raw source url — inspect per-deployment `sourceUrl`. */
+  chartSourceAmbiguous: boolean;
   deploymentCount: number;
   deployments: Deployment[];
 }

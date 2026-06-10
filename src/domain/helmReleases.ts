@@ -13,7 +13,8 @@ const COLLECTOR_QUERY = `
     hrep.helm_repo_name as helm_repo_name,
     rel.chart_name, rel.chart_version, rel.release_name, rel.namespace,
     rel.url, rel.repo_name, rel.hajimari_icon, rel.hajimari_group, rel.timestamp,
-    repo.stars, repo.url as repo_url
+    repo.stars, repo.url as repo_url,
+    rel.chart_ref_kind as chart_ref_kind, null as source_tag
   from flux_helm_release rel
   join flux_helm_repo hrep
     on rel.helm_repo_name = hrep.helm_repo_name
@@ -30,7 +31,8 @@ const COLLECTOR_QUERY = `
     flor.name as helm_repo_name,
     rel.chart_name, rel.chart_version, rel.release_name, rel.namespace,
     rel.url, rel.repo_name, rel.hajimari_icon, rel.hajimari_group, rel.timestamp,
-    repo.stars, repo.url as repo_url
+    repo.stars, repo.url as repo_url,
+    rel.chart_ref_kind as chart_ref_kind, flor.tag as source_tag
   from flux_helm_release rel
   join flux_oci_repository flor
     on rel.helm_repo_name = flor.name
@@ -48,7 +50,8 @@ const COLLECTOR_QUERY = `
     '' as helm_repo_name,
     rel.chart_name, rel.chart_version, rel.release_name, rel.namespace,
     rel.url, rel.repo_name, rel.hajimari_icon, rel.hajimari_group, rel.timestamp,
-    repo.stars, repo.url as repo_url
+    repo.stars, repo.url as repo_url,
+    'Argo' as chart_ref_kind, null as source_tag
   from argo_helm_application rel
   join repo repo on rel.repo_name = repo.repo_name
 `;
@@ -67,6 +70,22 @@ interface CollectorRow {
   timestamp: string;
   stars: number | null;
   repo_url: string | null;
+  chart_ref_kind: string | null;
+  source_tag: string | null;
+}
+
+/**
+ * Derive the real chart name from an OCIRepository `spec.url` when it differs
+ * from the (possibly mislabeled) `chart_name`. For `chartRef` HelmReleases the
+ * upstream indexer records `chart_name` as the HelmRelease/OCIRepository name
+ * (e.g. "homepage"), while the OCI url's last path segment is the actual chart
+ * (e.g. "oci://ghcr.io/bjw-s-labs/helm/app-template" -> "app-template").
+ * Returns null when it can't add information (non-OCI, empty, or already equal).
+ */
+function deriveOciChart(rawUrl: string, chartName: string): string | null {
+  const last = rawUrl.replace(/\/+$/, "").split("/").pop() ?? "";
+  if (!last || last === chartName) return null;
+  return last;
 }
 
 /** Build the full release-key index from the metadata database. */
@@ -76,9 +95,12 @@ export function buildReleaseIndex(db: Database): ReleaseIndex {
   const urlMeta = new Map<string, import("./types.js").UrlMeta>();
 
   for (const row of rows) {
-    const mergedUrl = mergeHelmURL(row.helm_repo_url ?? "");
+    const rawUrl = row.helm_repo_url ?? "";
+    const mergedUrl = mergeHelmURL(rawUrl);
     const key = releaseKey(mergedUrl, row.chart_name, row.release_name);
     const stars = row.stars ?? 0;
+    const sourceKind = row.chart_ref_kind;
+    const resolvedChart = sourceKind === "OCIRepository" ? deriveOciChart(rawUrl, row.chart_name) : null;
 
     const deployment: Deployment = {
       key,
@@ -87,6 +109,10 @@ export function buildReleaseIndex(db: Database): ReleaseIndex {
       namespace: row.namespace,
       chartVersion: row.chart_version,
       chartSourceUrl: mergedUrl,
+      sourceUrl: rawUrl,
+      sourceKind,
+      sourceTag: row.source_tag,
+      resolvedChart,
       helmRepoName: row.helm_repo_name ?? "",
       repo: row.repo_name,
       repoUrl: row.repo_url,
@@ -99,7 +125,16 @@ export function buildReleaseIndex(db: Database): ReleaseIndex {
 
     let group = groups.get(key);
     if (!group) {
-      group = { id: key, chart: row.chart_name, chartSourceUrl: mergedUrl, deploymentCount: 0, deployments: [] };
+      group = {
+        id: key,
+        chart: row.chart_name,
+        chartSourceUrl: mergedUrl,
+        sourceUrls: [],
+        resolvedChart: null,
+        chartSourceAmbiguous: false,
+        deploymentCount: 0,
+        deployments: [],
+      };
       groups.set(key, group);
     }
     group.deployments.push(deployment);
@@ -108,9 +143,16 @@ export function buildReleaseIndex(db: Database): ReleaseIndex {
     urlMeta.set(row.url, { repo: row.repo_name, chart: row.chart_name, stars, key });
   }
 
-  // Sort each group's deployments by stars desc for stable, useful ordering.
+  // Sort each group's deployments by stars desc, and derive the group-level raw
+  // source summary (a single merged `chartSourceUrl` can collapse several distinct
+  // real chart urls, so the raw data is most accurate per-deployment).
   for (const group of groups.values()) {
     group.deployments.sort((a, b) => b.stars - a.stars);
+    const distinctUrls = [...new Set(group.deployments.map((d) => d.sourceUrl).filter(Boolean))];
+    group.sourceUrls = distinctUrls.slice(0, 5);
+    group.chartSourceAmbiguous = distinctUrls.length > 1;
+    const distinctResolved = [...new Set(group.deployments.map((d) => d.resolvedChart).filter(Boolean))];
+    group.resolvedChart = distinctResolved.length === 1 ? distinctResolved[0]! : null;
   }
 
   return { groups, urlMeta };

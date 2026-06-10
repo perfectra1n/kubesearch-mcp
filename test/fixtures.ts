@@ -45,6 +45,19 @@ export function makeFixtureDb(): { db: Database.Database; cleanup: () => void } 
     .prepare(`INSERT INTO flux_oci_repository VALUES (?,?,?,?,?)`)
     .run("cert-manager", "v1.14.0", "oci://ghcr.io/home-operations/charts-mirror/cert-manager", null, "onedr0p/home-ops");
 
+  // chartRef -> OCIRepository: a HelmRelease NAMED "homepage" that actually deploys the
+  // bjw-s app-template chart. mergeHelmURL collapses the real url to the generic bjw-s
+  // 'charts/' key, and the indexer records chart_name as the release name ("homepage") —
+  // so the new raw `sourceUrl`/`resolvedChart` fields must recover the real chart.
+  main
+    .prepare(`INSERT INTO flux_helm_release VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run("homepage", "homepage", "5.0.1", "default", "onedr0p/home-ops", null, null,
+      "OCIRepository", 12, "https://github.com/onedr0p/home-ops/blob/main/k8s/homepage/helmrelease.yaml",
+      "2026-06-02T00:00:00Z", "homepage", null);
+  main
+    .prepare(`INSERT INTO flux_oci_repository VALUES (?,?,?,?,?)`)
+    .run("homepage", "5.0.1", "oci://ghcr.io/bjw-s-labs/helm/app-template", null, "onedr0p/home-ops");
+
   // HelmRepository cert-manager (jetstack) in carpenike.
   main
     .prepare(`INSERT INTO flux_helm_release VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)

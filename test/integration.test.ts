@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 import { makeFixtureDb } from "./fixtures.js";
 import { buildReleaseIndex, searchReleaseGroups } from "../src/domain/helmReleases.js";
+import { mergeHelmURL, releaseKey } from "../src/domain/releaseKey.js";
 import { buildImageIndex, searchImages } from "../src/domain/images.js";
 import { grepValues } from "../src/domain/grep.js";
 import { summarizeValues } from "../src/domain/valuesSummary.js";
@@ -51,6 +52,43 @@ describe("buildReleaseIndex + search", () => {
     const { groups } = searchReleaseGroups(index, "cert-manager", 5, 0);
     const id = groups[0]!.id;
     expect(index.groups.get(id)).toBeDefined();
+  });
+});
+
+describe("chartRef / OCIRepository raw source", () => {
+  const homepageId = releaseKey(mergeHelmURL("oci://ghcr.io/bjw-s-labs/helm/app-template"), "homepage", "homepage");
+
+  it("keeps the collapsed group id (link parity) — does not change with the fix", () => {
+    expect(homepageId).toBe("ghcr.io-bjw-s-labs-charts-homepage");
+    expect(index.groups.get(homepageId)).toBeDefined();
+  });
+
+  it("preserves the normalized chart_source_url at the group level", () => {
+    const group = index.groups.get(homepageId)!;
+    expect(group.chartSourceUrl).toBe("oci://ghcr.io/bjw-s-labs/charts/");
+  });
+
+  it("surfaces the real chart via raw source fields", () => {
+    const group = index.groups.get(homepageId)!;
+    const dep = group.deployments[0]!;
+    expect(dep.sourceUrl).toBe("oci://ghcr.io/bjw-s-labs/helm/app-template");
+    expect(dep.sourceKind).toBe("OCIRepository");
+    expect(dep.sourceTag).toBe("5.0.1");
+    expect(dep.resolvedChart).toBe("app-template");
+    expect(group.resolvedChart).toBe("app-template");
+    expect(group.sourceUrls).toEqual(["oci://ghcr.io/bjw-s-labs/helm/app-template"]);
+    expect(group.chartSourceAmbiguous).toBe(false);
+  });
+
+  it("does not fake-resolve a chart for HelmRepository (repo-root) sources", () => {
+    const group = index.groups.get("ghcr.io-home-operations-charts-mirror-cert-manager");
+    // cross-check the jetstack HelmRepository deployment from the other group
+    const { groups } = searchReleaseGroups(index, "cert-manager", 25, 0);
+    const jetstack = groups.flatMap((g) => g.deployments).find((d) => d.sourceUrl === "https://charts.jetstack.io");
+    expect(jetstack).toBeDefined();
+    expect(jetstack!.sourceKind).toBe("HelmRepository");
+    expect(jetstack!.resolvedChart).toBeNull();
+    expect(group).toBeDefined();
   });
 });
 

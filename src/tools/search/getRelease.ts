@@ -20,6 +20,10 @@ function slimRepo(d: Deployment) {
     chart_version: d.chartVersion,
     file_url: d.fileUrl,
     timestamp: d.timestamp,
+    source_url: d.sourceUrl,
+    source_kind: d.sourceKind,
+    source_tag: d.sourceTag,
+    resolved_chart: d.resolvedChart,
   };
 }
 
@@ -36,7 +40,11 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
         "- `deployments`: the paginated list of every repo deploying the chart (no values) — use it to find a repo to " +
         "drill into.\n" +
         "- `values`: the full parsed `spec.values` for selected deployments — narrow with `repo` and/or `value_paths` to " +
-        "fetch just the config (or subtree) you care about. This is the drill-down; prefer `summary` first.",
+        "fetch just the config (or subtree) you care about. This is the drill-down; prefer `summary` first.\n" +
+        "Note: `chart_source_url` is the normalized kubesearch.dev grouping key, not necessarily the pullable chart. For " +
+        "`chartRef`/OCIRepository releases the real chart is in `source_urls` (group) and each deployment's `source_url` + " +
+        "`source_tag`; `resolved_chart` surfaces the true chart name when it differs from `chart`. Confirm by cloning the " +
+        "deployment's repo (repo_clone) and reading its OCIRepository source.yaml.",
       inputSchema: {
         id: z.string().min(1).describe("The release id / slug, e.g. 'ghcr.io-home-operations-charts-mirror-cert-manager'."),
         view: z
@@ -57,6 +65,9 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
         id: z.string(),
         chart: z.string(),
         chart_source_url: z.string(),
+        source_urls: z.array(z.string()),
+        resolved_chart: z.string().nullable(),
+        chart_source_ambiguous: z.boolean(),
         deployment_count: z.number(),
         kubesearch_url: z.string(),
         view: z.enum(["summary", "deployments", "values"]),
@@ -95,6 +106,10 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
               chart_version: z.string().nullable(),
               file_url: z.string(),
               timestamp: z.string(),
+              source_url: z.string(),
+              source_kind: z.string().nullable(),
+              source_tag: z.string().nullable(),
+              resolved_chart: z.string().nullable(),
             }),
           )
           .optional(),
@@ -113,6 +128,10 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
               chart_version: z.string().nullable(),
               file_url: z.string(),
               timestamp: z.string(),
+              source_url: z.string(),
+              source_kind: z.string().nullable(),
+              source_tag: z.string().nullable(),
+              resolved_chart: z.string().nullable(),
               values: z.unknown().optional(),
               values_omitted: z.string().optional(),
             }),
@@ -136,6 +155,9 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
         id: group.id,
         chart: group.chart,
         chart_source_url: group.chartSourceUrl,
+        source_urls: group.sourceUrls,
+        resolved_chart: group.resolvedChart,
+        chart_source_ambiguous: group.chartSourceAmbiguous,
         deployment_count: group.deploymentCount,
         kubesearch_url: helmReleaseDetailUrl(group.id),
         view,
