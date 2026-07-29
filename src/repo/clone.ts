@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import type { CloneConfig } from "../config.js";
 import { log } from "../util/log.js";
+import { Semaphore } from "../util/semaphore.js";
 import { validateCloneUrl } from "./urlGuard.js";
 import { curatedTree, globToRegExp, resolveInside, walkFiles } from "./fsSafe.js";
 import type { CloneRecord, CloneResult, RepoFileContent, RepoFileListing, RepoGrepResult } from "./types.js";
@@ -21,16 +22,25 @@ export type IndexedRepoResolver = (name: string) => Promise<{ url: string; branc
 
 export class RepoError extends Error {}
 
+/** Handles are UUIDs; only directories shaped like one are ours to delete. */
+const HANDLE_DIR_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export class RepoStore {
   private records = new Map<string, CloneRecord>();
   private timers = new Map<string, NodeJS.Timeout>();
   /** Dedupe index: "url\nbranch" -> handle, so re-cloning reuses one working copy. */
   private byKey = new Map<string, string>();
+  /** In-progress clones by key, so concurrent callers share one git invocation. */
+  private inFlight = new Map<string, Promise<CloneResult>>();
+  private sweptOnce: Promise<void> | null = null;
+  private readonly gitLimit: Semaphore;
 
   constructor(
     private readonly cfg: CloneConfig,
     private readonly resolveIndexed: IndexedRepoResolver,
-  ) {}
+  ) {
+    this.gitLimit = new Semaphore(cfg.maxConcurrent);
+  }
 
   get enabled(): boolean {
     return this.cfg.enabled;
@@ -60,10 +70,28 @@ export class RepoStore {
     const { url } = validateCloneUrl(rawUrl, this.cfg);
     const key = `${url}\n${branchHint ?? ""}`;
 
+    // Join an in-progress clone of the same repo+branch. Nothing may await
+    // between this lookup and the set below, or two callers would both miss and
+    // race two `git clone`s into two directories for one repo.
+    const running = this.inFlight.get(key);
+    if (running) return running;
+
+    const started = this.runClone(key, url, branchHint, input);
+    this.inFlight.set(key, started);
+    void started
+      .catch(() => {})
+      .finally(() => {
+        if (this.inFlight.get(key) === started) this.inFlight.delete(key);
+      });
+    return started;
+  }
+
+  private async runClone(key: string, url: string, branchHint: string | null, input: string): Promise<CloneResult> {
     // Reuse (and optionally refresh) an existing clone of the same repo+branch.
     const existing = this.records.get(this.byKey.get(key) ?? "");
     if (existing) return this.reuse(existing);
 
+    await this.ensureSwept();
     await fsp.mkdir(this.cfg.dir, { recursive: true });
     this.evictToCapacity();
 
@@ -71,7 +99,7 @@ export class RepoStore {
     const dir = path.join(this.cfg.dir, handle);
 
     try {
-      await this.gitClone(url, dir, branchHint);
+      await this.gitLimit.run(() => this.gitClone(url, dir, branchHint));
     } catch (err) {
       await rmDir(dir);
       throw new RepoError(`git clone failed: ${cleanGitError((err as Error).message)}`);
@@ -110,7 +138,7 @@ export class RepoStore {
     let updated = false;
     if (this.cfg.refreshOnClone) {
       try {
-        await this.gitUpdate(record.dir, record.branch);
+        await this.gitLimit.run(() => this.gitUpdate(record.dir, record.branch));
         updated = true;
       } catch (err) {
         log.warn(`refresh of ${record.url} failed, serving existing copy: ${cleanGitError((err as Error).message)}`);
@@ -156,10 +184,18 @@ export class RepoStore {
   }
 
   private gitOpts(timeoutMs = this.cfg.timeoutMs) {
-    return { env: this.gitEnv(), timeout: timeoutMs, killSignal: "SIGKILL" as const, windowsHide: true };
+    return {
+      env: this.gitEnv(),
+      timeout: timeoutMs,
+      killSignal: "SIGKILL" as const,
+      windowsHide: true,
+      // A chatty progress/warning stream on a big repo would otherwise blow
+      // execFile's 1 MB default and fail the clone as ENOBUFS.
+      maxBuffer: 16 * 1024 * 1024,
+    };
   }
 
-  private async gitClone(url: string, dir: string, branch: string | null): Promise<void> {
+  protected async gitClone(url: string, dir: string, branch: string | null): Promise<void> {
     const base = ["clone", "--depth", "1", "--single-branch", "--no-tags", "--filter=blob:limit=2m"];
     try {
       const args = branch ? [...base, "--branch", branch, "--", url, dir] : [...base, "--", url, dir];
@@ -176,14 +212,14 @@ export class RepoStore {
   }
 
   /** Shallow-fetch the latest tip and hard-reset the working tree to it. */
-  private async gitUpdate(dir: string, branch: string): Promise<void> {
+  protected async gitUpdate(dir: string, branch: string): Promise<void> {
     const ref = branch && branch !== "HEAD" ? branch : "HEAD";
     await execFileAsync("git", ["-C", dir, "fetch", "--depth", "1", "--no-tags", "origin", ref], this.gitOpts());
     await execFileAsync("git", ["-C", dir, "reset", "--hard", "FETCH_HEAD"], this.gitOpts());
     await execFileAsync("git", ["-C", dir, "clean", "-fdq"], this.gitOpts());
   }
 
-  private async currentBranch(dir: string, fallback: string | null): Promise<string> {
+  protected async currentBranch(dir: string, fallback: string | null): Promise<string> {
     try {
       const { stdout } = await execFileAsync("git", ["-C", dir, "rev-parse", "--abbrev-ref", "HEAD"], this.gitOpts(10000));
       const b = stdout.trim();
@@ -308,6 +344,37 @@ export class RepoStore {
     await rmDir(record.dir);
     log(`cleaned up clone ${handle}`);
     return true;
+  }
+
+  /**
+   * Delete clone directories this process doesn't know about. Clone state lives
+   * only in memory, so an ungraceful exit (OOM kill, crash, SIGKILL) strands
+   * every working copy on the volume with nothing left to reap it.
+   *
+   * Only UUID-shaped directories are touched: the clone dir may be shared or
+   * misconfigured, and deleting someone else's files is worse than leaking.
+   */
+  async sweepOrphans(): Promise<void> {
+    let entries: fs.Dirent[];
+    try {
+      entries = await fsp.readdir(this.cfg.dir, { withFileTypes: true });
+    } catch {
+      return; // nothing cloned yet
+    }
+    const live = new Set([...this.records.values()].map((r) => path.basename(r.dir)));
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (!entry.isDirectory() || !HANDLE_DIR_RE.test(entry.name) || live.has(entry.name)) return;
+        await rmDir(path.join(this.cfg.dir, entry.name));
+        log(`removed orphaned clone directory ${entry.name}`);
+      }),
+    );
+  }
+
+  /** Sweep once before the first clone, so it can't delete a fresh working copy. */
+  private ensureSwept(): Promise<void> {
+    if (!this.sweptOnce) this.sweptOnce = this.sweepOrphans();
+    return this.sweptOnce;
   }
 
   async cleanupAll(): Promise<void> {

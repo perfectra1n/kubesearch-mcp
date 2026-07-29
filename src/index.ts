@@ -20,6 +20,11 @@ async function main(): Promise<void> {
     return store.getRepoByName(name);
   });
 
+  // Reap clone directories stranded by an ungraceful exit (crash, OOM kill).
+  if (cfg.clone.enabled) {
+    void repos.sweepOrphans().catch((err) => log.warn(`clone sweep failed: ${(err as Error).message}`));
+  }
+
   // Begin fetching data immediately so the first request is fast; don't block startup.
   store.ready().then(
     () => log(`data ready (release ${store.currentTag})`),

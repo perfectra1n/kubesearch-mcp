@@ -57,6 +57,8 @@ export interface CloneConfig {
   refreshOnClone: boolean;
   /** Max number of concurrent cached clones (LRU-evicted). */
   maxRepos: number;
+  /** Max number of `git clone`/`git fetch` subprocesses running at once. */
+  maxConcurrent: number;
   /** Reject/clean a clone whose working tree exceeds this size. */
   maxBytes: number;
   /** Hard timeout for the `git clone` subprocess. */
@@ -125,6 +127,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ttlMs: parseIntEnv(env.KUBESEARCH_CLONE_TTL_MINUTES, 30) * 60 * 1000,
     refreshOnClone: parseBoolEnv(env.KUBESEARCH_CLONE_REFRESH_ON_CLONE, true),
     maxRepos: parseIntEnv(env.KUBESEARCH_CLONE_MAX_REPOS, 5),
+    maxConcurrent: parseIntEnv(env.KUBESEARCH_CLONE_MAX_CONCURRENT, 2),
     maxBytes: parseIntEnv(env.KUBESEARCH_CLONE_MAX_MB, 200) * 1024 * 1024,
     timeoutMs: parseIntEnv(env.KUBESEARCH_CLONE_TIMEOUT_SECONDS, 120) * 1000,
   };

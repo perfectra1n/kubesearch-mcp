@@ -10,6 +10,7 @@ const base: CloneConfig = {
   ttlMs: 60000,
   refreshOnClone: true,
   maxRepos: 5,
+  maxConcurrent: 2,
   maxBytes: 100 * 1024 * 1024,
   timeoutMs: 60000,
 };
