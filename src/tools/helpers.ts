@@ -6,9 +6,13 @@ export type ToolResult = {
   isError?: boolean;
 };
 
-/** Success result: human-readable text + machine-readable structuredContent. */
+/**
+ * Success result: machine-readable structuredContent plus the equivalent text
+ * the spec asks for. The text is compact on purpose — it is what most clients
+ * feed to the model, and pretty-printing it spends tokens on indentation.
+ */
 export function ok(data: Record<string, unknown>): ToolResult {
-  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }], structuredContent: data };
+  return { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data };
 }
 
 /** Error result (skips outputSchema validation per the MCP spec). */
@@ -19,8 +23,7 @@ export function fail(message: string): ToolResult {
 /** Run a repo-tool body, turning thrown errors into a clean isError result. */
 export async function guarded(fn: () => Promise<Record<string, unknown>>): Promise<ToolResult> {
   try {
-    const data = await fn();
-    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    return ok(await fn());
   } catch (err) {
     return fail((err as Error).message);
   }

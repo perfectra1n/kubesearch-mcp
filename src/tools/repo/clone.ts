@@ -17,6 +17,17 @@ export function registerRepoClone(server: McpServer, repos: RepoStore): void {
       inputSchema: {
         repo: z.string().min(1).describe("An indexed repo name like 'onedr0p/home-ops', or a full https:// Git URL."),
       },
+      outputSchema: {
+        handle: z.string(),
+        resolved_url: z.string(),
+        branch: z.string(),
+        file_count: z.number(),
+        size_mb: z.number(),
+        expires_in_minutes: z.number(),
+        reused: z.boolean(),
+        updated: z.boolean(),
+        tree: z.array(z.string()),
+      },
       annotations: { readOnlyHint: false, openWorldHint: true, idempotentHint: false, destructiveHint: false },
     },
     async ({ repo }) => guarded(async () => repos.clone(repo) as unknown as Record<string, unknown>),

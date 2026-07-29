@@ -25,6 +25,13 @@ export function registerRepoReadFile(server: McpServer, repos: RepoStore): void 
           .default(256 * 1024)
           .describe("Max bytes to return."),
       },
+      outputSchema: {
+        handle: z.string(),
+        path: z.string(),
+        content: z.string(),
+        bytes: z.number(),
+        truncated: z.boolean(),
+      },
       annotations: READ_ONLY,
     },
     async ({ handle, path, max_bytes }) =>

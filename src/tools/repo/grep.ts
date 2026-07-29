@@ -17,6 +17,19 @@ export function registerRepoGrep(server: McpServer, repos: RepoStore): void {
         glob: z.string().optional().describe("Optional glob filter, e.g. '**/*.yaml'."),
         max_results: z.number().int().min(1).max(500).default(100).describe("Max number of matching lines to return."),
       },
+      outputSchema: {
+        handle: z.string(),
+        query: z.string(),
+        total_matches: z.number(),
+        matches: z.array(
+          z.object({
+            path: z.string(),
+            line: z.number(),
+            text: z.string(),
+          }),
+        ),
+        truncated: z.boolean(),
+      },
       annotations: READ_ONLY,
     },
     async ({ handle, query, glob, max_results }) =>
