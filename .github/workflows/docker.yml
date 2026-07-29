@@ -18,7 +18,12 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # Never publish an image that hasn't passed typecheck + tests.
+  verify:
+    uses: ./.github/workflows/ci.yml
+
   build:
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read

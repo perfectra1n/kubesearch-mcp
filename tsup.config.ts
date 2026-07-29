@@ -3,6 +3,8 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: ["src/index.ts"],
   format: ["esm"],
+  // node20 is the minimum supported runtime (see package.json engines);
+  // CI and the Docker image run the version pinned in .nvmrc.
   target: "node20",
   outDir: "dist",
   clean: true,
