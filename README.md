@@ -247,9 +247,9 @@ mise run image        # build the container image locally
 ```
 
 The underlying `npm run <script>` commands still work if you'd rather not use mise; mise
-is a thin wrapper plus a pinned toolchain. Tool versions live in `.mise/config.toml` with
-checksums in `.mise/mise.lock`, and `package.json`'s `engines.node` records the minimum
-supported runtime.
+is a thin wrapper plus a pinned toolchain. Exact tool versions live in
+`.mise/config.toml`, and `package.json`'s `engines.node` records the minimum supported
+runtime.
 
 A [lefthook](https://lefthook.dev) `pre-commit` hook formats staged files with prettier
 and re-stages them, and runs shellcheck on shell scripts. It deliberately doesn't run

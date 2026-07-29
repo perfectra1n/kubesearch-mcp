@@ -4,4 +4,3 @@ coverage/
 
 # Generated / machine-owned files.
 package-lock.json
-.mise/mise.lock

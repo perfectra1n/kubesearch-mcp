@@ -21,10 +21,6 @@ jobs:
 
       - name: Setup mise
         uses: jdx/mise-action@v4
-        with:
-          # Pinned to match the version that wrote .mise/mise.lock (see ci.yml).
-          version: 2026.7.10
-          install_args: --locked
 
       - name: Lint (typecheck, formatting, shell)
         run: mise run lint
@@ -72,10 +68,6 @@ jobs:
 
       - name: Setup mise
         uses: jdx/mise-action@v4
-        with:
-          # Pinned to match the version that wrote .mise/mise.lock (see ci.yml).
-          version: 2026.7.10
-          install_args: --locked
 
       - name: Publish to npm
         run: |
