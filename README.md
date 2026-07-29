@@ -10,13 +10,13 @@ clone a repo so the model can review its actual manifests.
 
 ### Search tools
 
-| Tool | kubesearch.dev equivalent | What it does |
-| --- | --- | --- |
-| `kubesearch_search_releases` | `/#cert-manager` | Find charts by name; see who deploys them, ranked by popularity. |
-| `kubesearch_get_release` | `/hr/<id>` | One chart's deployments. `view: "summary"` (default) digests the common `spec.values`; `view: "deployments"` paginates the repo list; `view: "values"` drills into a repo's full config. |
-| `kubesearch_search_images` | `/image#image cert-manager` | Container image repositories and the tags used in the wild. |
-| `kubesearch_grep_values` | `/grep#grep cert-manager.io` | Full-text grep across real-world Helm values for config examples. |
-| `kubesearch_status` | — | Report the cached data's release date and row counts. |
+| Tool                         | kubesearch.dev equivalent    | What it does                                                                                                                                                                             |
+| ---------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kubesearch_search_releases` | `/#cert-manager`             | Find charts by name; see who deploys them, ranked by popularity.                                                                                                                         |
+| `kubesearch_get_release`     | `/hr/<id>`                   | One chart's deployments. `view: "summary"` (default) digests the common `spec.values`; `view: "deployments"` paginates the repo list; `view: "values"` drills into a repo's full config. |
+| `kubesearch_search_images`   | `/image#image cert-manager`  | Container image repositories and the tags used in the wild.                                                                                                                              |
+| `kubesearch_grep_values`     | `/grep#grep cert-manager.io` | Full-text grep across real-world Helm values for config examples.                                                                                                                        |
+| `kubesearch_status`          | —                            | Report the cached data's release date and row counts.                                                                                                                                    |
 
 All search tools are annotated read-only and return a typed `structuredContent`
 payload alongside the equivalent text. They page with `limit`/`offset` and report
@@ -31,13 +31,13 @@ a page are reported individually via `values_omitted` and `omitted_count`.
 
 ### Repository review tools (enabled by default; set `KUBESEARCH_ENABLE_CLONE=false` to disable)
 
-| Tool | What it does |
-| --- | --- |
-| `repo_clone` | Temporarily clone a repo (indexed `owner/repo` **or** an https Git URL) and return a `handle` + a curated file tree. |
-| `repo_list_files` | List files in a clone (optional sub-path + glob). |
-| `repo_read_file` | Read a text file from a clone (binary refused, large files truncated). |
-| `repo_grep` | Substring-search a clone's text files; returns `path:line` matches. Takes `limit` and `case_sensitive`. |
-| `repo_cleanup` | Delete a clone early (clones also auto-expire). |
+| Tool              | What it does                                                                                                         |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `repo_clone`      | Temporarily clone a repo (indexed `owner/repo` **or** an https Git URL) and return a `handle` + a curated file tree. |
+| `repo_list_files` | List files in a clone (optional sub-path + glob).                                                                    |
+| `repo_read_file`  | Read a text file from a clone (binary refused, large files truncated).                                               |
+| `repo_grep`       | Substring-search a clone's text files; returns `path:line` matches. Takes `limit` and `case_sensitive`.              |
+| `repo_cleanup`    | Delete a clone early (clones also auto-expire).                                                                      |
 
 Clones are **sandboxed**: shallow (`--depth 1`, blob-size filtered), run with `git` via
 `execFile` (no shell) and a scrubbed environment, size/TTL/concurrency-capped, confined to
@@ -171,13 +171,13 @@ Point an MCP client at it:
 reverse proxy that authenticates for you; it is not fine on a public interface. Before
 exposing the port beyond a network you control:
 
-| Variable | Default | What it does |
-| --- | --- | --- |
-| `MCP_AUTH_TOKEN` | _(unset — auth off)_ | Require `Authorization: Bearer <token>`. Accepts a comma-separated list, e.g. one token per client. |
+| Variable              | Default                | What it does                                                                                                                                                                     |
+| --------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MCP_AUTH_TOKEN`      | _(unset — auth off)_   | Require `Authorization: Bearer <token>`. Accepts a comma-separated list, e.g. one token per client.                                                                              |
 | `MCP_ALLOWED_ORIGINS` | _(unset — any origin)_ | Comma-separated `Origin` allowlist. When set, CORS reflects only these origins and other browser callers get 403. Requests with no `Origin` (normal MCP clients) are unaffected. |
-| `MCP_ALLOWED_HOSTS` | _(unset — any host)_ | Comma-separated `Host` allowlist. Guards against DNS rebinding, which matters for an instance reachable from a browser. |
-| `MCP_MAX_SESSIONS` | `100` | Refuse new sessions past this many concurrent ones. |
-| `MCP_MAX_BODY_BYTES` | `4194304` | Reject larger request bodies with 413. |
+| `MCP_ALLOWED_HOSTS`   | _(unset — any host)_   | Comma-separated `Host` allowlist. Guards against DNS rebinding, which matters for an instance reachable from a browser.                                                          |
+| `MCP_MAX_SESSIONS`    | `100`                  | Refuse new sessions past this many concurrent ones.                                                                                                                              |
+| `MCP_MAX_BODY_BYTES`  | `4194304`              | Reject larger request bodies with 413.                                                                                                                                           |
 
 The server logs a warning at startup if it binds a non-loopback address with
 authentication disabled. Terminate TLS at a proxy; the server speaks plain HTTP.
@@ -194,44 +194,67 @@ docker run -i --rm -v kubesearch-data:/data -e MCP_TRANSPORT=stdio kubesearch-mc
 
 All configuration is via environment variables:
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `MCP_TRANSPORT` | `stdio` (`http` in Docker) | `stdio` or `http` (`streamable-http` and `streamablehttp` are accepted aliases). |
-| `MCP_HTTP_HOST` | `0.0.0.0` | HTTP bind host (http transport). |
-| `MCP_HTTP_PORT` / `PORT` | `3000` | HTTP listen port. `MCP_HTTP_PORT` wins if both are set; the image sets neither, so a PaaS-injected `PORT` is honoured. |
-| `MCP_AUTH_TOKEN` | _(unset — auth off)_ | If set, every HTTP request must send `Authorization: Bearer <token>`. Accepts a single token or a comma-separated list of accepted tokens (e.g. one per client). |
-| `MCP_ALLOWED_ORIGINS` | _(unset — any)_ | `Origin` allowlist for `/mcp`; see [Securing the HTTP transport](#securing-the-http-transport). |
-| `MCP_ALLOWED_HOSTS` | _(unset — any)_ | `Host` allowlist for `/mcp` (DNS-rebinding guard). |
-| `MCP_MAX_BODY_BYTES` | `4194304` | Max HTTP request body size; larger bodies get 413. |
-| `MCP_MAX_SESSIONS` | `100` | Max concurrent HTTP sessions; further `initialize` calls get 503. |
-| `MCP_SESSION_TTL_MINUTES` | `30` | Close an HTTP session after this long with no requests. |
-| `LOG_LEVEL` | `info` | Minimum log severity to emit: `debug`, `info`, `warn`, or `error`. All logs are unstructured text on stderr. |
-| `KUBESEARCH_CACHE_DIR` | `~/.cache/kubesearch-mcp` (`/data` in Docker) | Where the SQLite databases are cached. |
-| `KUBESEARCH_REFRESH_HOURS` | `24` | How often to check for a newer daily release. `0` disables refresh (use cache forever). A failed check retries on a short backoff rather than waiting the full interval. |
-| `KUBESEARCH_DOWNLOAD_TIMEOUT_SECONDS` | `300` | Wall-clock limit for downloading one database. Downloads also abort after 30s with no data received. |
-| `KUBESEARCH_MAX_DB_MB` | `512` | Reject a database download larger than this. |
-| `GITHUB_TOKEN` | _(unset)_ | Lifts the GitHub API rate limit (60→5000/hr) used to resolve the latest release. Recommended. |
-| `KUBESEARCH_UPSTREAM_REPO` | `whazor/k8s-at-home-search` | Source repo for the databases (override only for forks/testing). |
-| `KUBESEARCH_ENABLE_CLONE` | `true` | Enable the `repo_*` clone/review tools. Set `false` to hide them entirely. |
-| `KUBESEARCH_CLONE_ALLOWED_HOSTS` | _(any)_ | Comma-separated host allowlist, e.g. `github.com,gitlab.com`. Empty = any public host. |
-| `KUBESEARCH_CLONE_ALLOW_PRIVATE` | `false` | Permit cloning from private/loopback/link-local/metadata addresses (SSRF guard off). |
-| `KUBESEARCH_CLONE_DIR` | `<cacheDir>/clones` | Where ephemeral clones live. |
-| `KUBESEARCH_CLONE_TTL_MINUTES` | `30` | Auto-delete a clone after this much inactivity (timer resets on each access). |
-| `KUBESEARCH_CLONE_REFRESH_ON_CLONE` | `true` | On a repeat clone of the same repo, `git fetch` + reset to the latest commit. |
-| `KUBESEARCH_CLONE_MAX_REPOS` | `5` | Max concurrent cached clones (LRU-evicted). |
-| `KUBESEARCH_CLONE_MAX_CONCURRENT` | `2` | Max `git` subprocesses running at once. |
-| `KUBESEARCH_CLONE_MAX_MB` | `200` | Reject/clean a clone whose tree exceeds this size. |
-| `KUBESEARCH_CLONE_TIMEOUT_SECONDS` | `120` | Hard timeout for the `git clone` subprocess. |
+| Variable                              | Default                                       | Description                                                                                                                                                              |
+| ------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `MCP_TRANSPORT`                       | `stdio` (`http` in Docker)                    | `stdio` or `http` (`streamable-http` and `streamablehttp` are accepted aliases).                                                                                         |
+| `MCP_HTTP_HOST`                       | `0.0.0.0`                                     | HTTP bind host (http transport).                                                                                                                                         |
+| `MCP_HTTP_PORT` / `PORT`              | `3000`                                        | HTTP listen port. `MCP_HTTP_PORT` wins if both are set; the image sets neither, so a PaaS-injected `PORT` is honoured.                                                   |
+| `MCP_AUTH_TOKEN`                      | _(unset — auth off)_                          | If set, every HTTP request must send `Authorization: Bearer <token>`. Accepts a single token or a comma-separated list of accepted tokens (e.g. one per client).         |
+| `MCP_ALLOWED_ORIGINS`                 | _(unset — any)_                               | `Origin` allowlist for `/mcp`; see [Securing the HTTP transport](#securing-the-http-transport).                                                                          |
+| `MCP_ALLOWED_HOSTS`                   | _(unset — any)_                               | `Host` allowlist for `/mcp` (DNS-rebinding guard).                                                                                                                       |
+| `MCP_MAX_BODY_BYTES`                  | `4194304`                                     | Max HTTP request body size; larger bodies get 413.                                                                                                                       |
+| `MCP_MAX_SESSIONS`                    | `100`                                         | Max concurrent HTTP sessions; further `initialize` calls get 503.                                                                                                        |
+| `MCP_SESSION_TTL_MINUTES`             | `30`                                          | Close an HTTP session after this long with no requests.                                                                                                                  |
+| `LOG_LEVEL`                           | `info`                                        | Minimum log severity to emit: `debug`, `info`, `warn`, or `error`. All logs are unstructured text on stderr.                                                             |
+| `KUBESEARCH_CACHE_DIR`                | `~/.cache/kubesearch-mcp` (`/data` in Docker) | Where the SQLite databases are cached.                                                                                                                                   |
+| `KUBESEARCH_REFRESH_HOURS`            | `24`                                          | How often to check for a newer daily release. `0` disables refresh (use cache forever). A failed check retries on a short backoff rather than waiting the full interval. |
+| `KUBESEARCH_DOWNLOAD_TIMEOUT_SECONDS` | `300`                                         | Wall-clock limit for downloading one database. Downloads also abort after 30s with no data received.                                                                     |
+| `KUBESEARCH_MAX_DB_MB`                | `512`                                         | Reject a database download larger than this.                                                                                                                             |
+| `GITHUB_TOKEN`                        | _(unset)_                                     | Lifts the GitHub API rate limit (60→5000/hr) used to resolve the latest release. Recommended.                                                                            |
+| `KUBESEARCH_UPSTREAM_REPO`            | `whazor/k8s-at-home-search`                   | Source repo for the databases (override only for forks/testing).                                                                                                         |
+| `KUBESEARCH_ENABLE_CLONE`             | `true`                                        | Enable the `repo_*` clone/review tools. Set `false` to hide them entirely.                                                                                               |
+| `KUBESEARCH_CLONE_ALLOWED_HOSTS`      | _(any)_                                       | Comma-separated host allowlist, e.g. `github.com,gitlab.com`. Empty = any public host.                                                                                   |
+| `KUBESEARCH_CLONE_ALLOW_PRIVATE`      | `false`                                       | Permit cloning from private/loopback/link-local/metadata addresses (SSRF guard off).                                                                                     |
+| `KUBESEARCH_CLONE_DIR`                | `<cacheDir>/clones`                           | Where ephemeral clones live.                                                                                                                                             |
+| `KUBESEARCH_CLONE_TTL_MINUTES`        | `30`                                          | Auto-delete a clone after this much inactivity (timer resets on each access).                                                                                            |
+| `KUBESEARCH_CLONE_REFRESH_ON_CLONE`   | `true`                                        | On a repeat clone of the same repo, `git fetch` + reset to the latest commit.                                                                                            |
+| `KUBESEARCH_CLONE_MAX_REPOS`          | `5`                                           | Max concurrent cached clones (LRU-evicted).                                                                                                                              |
+| `KUBESEARCH_CLONE_MAX_CONCURRENT`     | `2`                                           | Max `git` subprocesses running at once.                                                                                                                                  |
+| `KUBESEARCH_CLONE_MAX_MB`             | `200`                                         | Reject/clean a clone whose tree exceeds this size.                                                                                                                       |
+| `KUBESEARCH_CLONE_TIMEOUT_SECONDS`    | `120`                                         | Hard timeout for the `git clone` subprocess.                                                                                                                             |
 
 ## Development
 
+[mise](https://mise.jdx.dev) pins the toolchain and owns the dev/release lifecycle, so
+every command below is the same one CI runs. One-time setup:
+
 ```bash
-npm run dev          # run from source via tsx
-npm run typecheck    # tsc --noEmit
-npm test             # vitest (unit + offline integration against a fixture DB)
-npm run build        # bundle to dist/ with tsup
-node scripts/smoke.mjs   # end-to-end: spawns the server over stdio and calls every tool
+mise install    # installs Node, lefthook, shellcheck; also installs the git hooks
 ```
+
+Then:
+
+```bash
+mise tasks            # list every task with a description
+mise run dev          # run from source via tsx
+mise run test         # vitest (unit + offline integration against a fixture DB)
+mise run lint         # typecheck + prettier --check + shellcheck
+mise run fmt          # format in place with prettier
+mise run build        # bundle to dist/ with tsup
+mise run ci           # the full local gate: fmt-check, typecheck, test, build
+mise run smoke        # end-to-end against live upstream data (needs network)
+mise run image        # build the container image locally
+```
+
+The underlying `npm run <script>` commands still work if you'd rather not use mise; mise
+is a thin wrapper plus a pinned toolchain. Tool versions live in `.mise/config.toml` with
+checksums in `.mise/mise.lock`, and `package.json`'s `engines.node` records the minimum
+supported runtime.
+
+A [lefthook](https://lefthook.dev) `pre-commit` hook formats staged files with prettier
+and re-stages them, and runs shellcheck on shell scripts. It deliberately doesn't run
+tests or the typechecker — that's CI's job, so committing stays fast. `mise install`
+wires the hook; `lefthook install` re-syncs it if needed.
 
 Tests run fully offline against a small fixture database that mirrors the real schema.
 They cover the domain logic, the download/refresh paths (with a stubbed `fetch`), the

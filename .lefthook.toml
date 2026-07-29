@@ -1,0 +1,22 @@
+# Git hooks, installed by `mise install` (see [hooks] in .mise/config.toml).
+#
+# The hook stays fast: it formats and re-stages, and lints things that are cheap
+# to check. Type-checking, tests and the build are CI's job — see the `ci` task.
+
+[pre-commit]
+parallel = true
+skip = ["merge", "rebase"]
+
+[pre-commit.commands.format]
+glob = ["*.ts", "*.mts", "*.js", "*.mjs", "*.json", "*.md", "*.yaml", "*.yml"]
+run = "npx prettier --write --ignore-unknown {staged_files}"
+stage_fixed = true
+
+[pre-commit.commands.format-mise]
+glob = [".mise/config.toml", ".mise.toml", "mise.toml"]
+run = "mise fmt"
+stage_fixed = true
+
+[pre-commit.commands.shellcheck]
+glob = ["*.sh"]
+run = "shellcheck {staged_files}"
