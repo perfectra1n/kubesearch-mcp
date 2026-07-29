@@ -111,7 +111,10 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
         value_paths: z
           .array(z.string().min(1))
           .optional()
-          .describe("`values` view: only return these value-path subtrees, e.g. ['server.persistentVolume','server.retentionPeriod']."),
+          .describe(
+            "`values` view: only return these value-path subtrees, e.g. ['server.persistentVolume','server.retentionPeriod']. " +
+              "Paths from the summary view's common_settings work as-is, including array forms like 'route.hostnames[]'.",
+          ),
       },
       outputSchema: {
         id: z.string(),
@@ -244,8 +247,9 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
           },
           top_repos: group.deployments.slice(0, 10).map(slimRepo),
           next_step:
-            `Use view:"deployments" to page through all ${group.deploymentCount} repos, or view:"values" ` +
-            `(with repo and/or value_paths) to see a specific deployment's full config.`,
+            `Cheapest next step: view:"values" with repo set to one of top_repos and value_paths set to the paths you ` +
+            `care about from common_settings above (they can be pasted as-is). Use view:"deployments" only when you ` +
+            `need to page through all ${group.deploymentCount} repos.`,
         });
       }
 
@@ -257,7 +261,9 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
           offset,
           has_more: offset + page.length < group.deploymentCount,
           deployments: page.map(slimRepo),
-          next_step: 'Use view:"values" with a repo or file_url from this list to fetch its full spec.values.',
+          next_step:
+            'Use view:"values" with a repo from this list to fetch its spec.values. Add value_paths to keep the ' +
+            "response small.",
         });
       }
 

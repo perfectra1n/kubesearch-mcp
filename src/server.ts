@@ -43,7 +43,8 @@ function instructions(cloneEnabled: boolean): string {
     (cloneEnabled
       ? `- repo_clone / repo_list_files / repo_read_file / repo_grep / repo_cleanup: temporarily clone a repo to review its actual manifests.\n`
       : "") +
-    `\nThe prompts (e.g. kubesearch_compare_deployments) chain these tools into useful workflows.`
+    `\nSearch tools page with limit/offset and report has_more.\n` +
+    `The prompts (e.g. kubesearch_compare_deployments, kubesearch_pick_image) chain these tools into useful workflows.`
   );
 }
 

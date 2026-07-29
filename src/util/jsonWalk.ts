@@ -45,10 +45,14 @@ export function walkObjects(node: unknown, cb: (obj: Record<string, unknown>) =>
  * requested path (so `server.persistentVolume` keeps the whole subtree, and
  * `server` keeps everything under `server`). Arrays are kept whole when their
  * containing key is selected. Returns a new object; `{}` when nothing matches.
+ *
+ * Array subscripts in the requested paths are ignored, so the `hostnames[]`
+ * form printed by the summary view's `common_settings` (and the `hosts[0]` form
+ * from a raw leaf path) can be pasted straight back in as a `value_paths` entry.
  */
 export function projectPaths(obj: unknown, paths: string[]): Record<string, unknown> {
   if (obj === null || typeof obj !== "object" || Array.isArray(obj)) return {};
-  const wanted = paths.filter((p) => p.length > 0);
+  const wanted = paths.map((p) => p.replace(/\[\d*\]/g, "")).filter((p) => p.length > 0);
   if (wanted.length === 0) return {};
 
   const pick = (node: Record<string, unknown>, prefix: string): Record<string, unknown> => {

@@ -63,6 +63,27 @@ describe("tool response envelope", () => {
   });
 });
 
+describe("prompts", () => {
+  it("registers an image-selection prompt that interpolates the app name", async () => {
+    const { prompts } = await client.listPrompts();
+    expect(prompts.map((p) => p.name)).toContain("kubesearch_pick_image");
+
+    const prompt = await client.getPrompt({ name: "kubesearch_pick_image", arguments: { app: "postgres" } });
+    const text = (prompt.messages[0]!.content as { text: string }).text;
+    expect(text).toContain("postgres");
+    expect(text).toContain("kubesearch_search_images");
+  });
+
+  it("steers the summary view toward the cheap drill-down", async () => {
+    const result = await client.callTool({
+      name: "kubesearch_get_release",
+      arguments: { id: "charts.jetstack.io-cert-manager", view: "summary" },
+    });
+    const body = result.structuredContent as { next_step: string };
+    expect(body.next_step).toContain("value_paths");
+  });
+});
+
 describe("search tools over fixture data", () => {
   it("finds the cert-manager release group", async () => {
     const result = await client.callTool({ name: "kubesearch_search_releases", arguments: { query: "cert-manager" } });
