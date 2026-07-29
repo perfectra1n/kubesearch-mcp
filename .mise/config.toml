@@ -6,17 +6,22 @@
 # First-time setup is `mise install`, which also installs the git hooks via the
 # postinstall hook at the bottom of this file.
 
-# There is deliberately no committed mise.lock. `mise lock` records the exact
-# build it resolved on the machine that ran it, and the entry is only readable by
-# a matching mise version — a lockfile generated on a NixOS host (where mise
-# source-compiles Node) makes `mise install --locked` fail everywhere else. The
-# versions below are exact, which is the reproducibility that matters here; add a
-# lockfile later if it can be generated on the same mise release CI installs.
+# `.mise/mise.lock` pins a checksum per tool per platform and is enforced by
+# `mise install --locked` in CI. Two constraints come with that:
+#
+#   1. Node comes from the aqua backend rather than mise's built-in `core:node`.
+#      `--locked` cannot resolve core-backend tools from a lockfile — it fails
+#      with "node@X is not in the lockfile" even against an entry the same mise
+#      release just wrote — so a plain `node = "..."` here breaks locked installs.
+#   2. Regenerate the lockfile (`mise lock`) with the same mise release CI
+#      installs, pinned in the workflows: a lockfile can be rejected across mise
+#      versions.
 
 [tools]
 # Keep in step with package.json `engines.node` (the minimum supported runtime)
-# and the Docker base image. Renovate updates them together.
-node = "24.18.0"
+# and the Docker base image. Renovate updates them together. This provides node,
+# npm and npx.
+"aqua:nodejs/node" = "24.18.0"
 lefthook = "2.1.10"
 # docker/healthcheck.sh is linted by the pre-commit hook.
 shellcheck = "0.11.0"
