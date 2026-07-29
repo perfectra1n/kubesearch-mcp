@@ -14,6 +14,16 @@ export interface Config {
   port: number;
   /** Accepted bearer tokens (HTTP transport). Empty means auth is disabled. */
   authTokens: string[];
+  /** Max bytes accepted in a single HTTP request body. */
+  maxBodyBytes: number;
+  /** Close an HTTP session after this long without a request. */
+  sessionTtlMs: number;
+  /** Refuse new HTTP sessions beyond this many concurrent ones. */
+  maxSessions: number;
+  /** When non-empty, only these browser Origins may call /mcp. */
+  allowedOrigins: string[];
+  /** When non-empty, the Host header must match one of these (DNS-rebinding guard). */
+  allowedHosts: string[];
   /** Directory where the downloaded SQLite databases are cached. */
   cacheDir: string;
   /** How long (ms) a cached database is trusted before re-checking for a newer release. */
@@ -123,6 +133,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     host: env.MCP_HTTP_HOST ?? "0.0.0.0",
     port: parseIntEnv(env.MCP_HTTP_PORT ?? env.PORT, 3000),
     authTokens: parseTokensEnv(env.MCP_AUTH_TOKEN),
+    maxBodyBytes: parseIntEnv(env.MCP_MAX_BODY_BYTES, 4 * 1024 * 1024),
+    sessionTtlMs: parseIntEnv(env.MCP_SESSION_TTL_MINUTES, 30) * 60 * 1000,
+    maxSessions: parseIntEnv(env.MCP_MAX_SESSIONS, 100),
+    allowedOrigins: parseListEnv(env.MCP_ALLOWED_ORIGINS),
+    allowedHosts: parseListEnv(env.MCP_ALLOWED_HOSTS),
     cacheDir,
     refreshTtlMs: (autoRefresh ? refreshHours : 24) * 60 * 60 * 1000,
     autoRefresh,
