@@ -150,7 +150,12 @@ export function writeFixtureData(mainPath: string, extPath: string): void {
     .prepare(`INSERT INTO flux_helm_release_values VALUES (?,?)`)
     .run(
       "https://github.com/bigstar/cluster/blob/main/apps/cert-manager/hr.yaml",
-      JSON.stringify({ installCRDs: true, replicaCount: 3, prometheus: { enabled: true } }),
+      JSON.stringify({
+        installCRDs: true,
+        replicaCount: 3,
+        prometheus: { enabled: true },
+        image: { repository: "quay.io/jetstack/cert-manager-webhook", tag: "v1.14.1" },
+      }),
     );
   ext.close();
 }

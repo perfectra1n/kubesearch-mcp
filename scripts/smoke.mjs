@@ -22,7 +22,12 @@ console.log("PROMPTS:", prompts.prompts.map((p) => p.name).join(", "));
 const call = async (name, args) => JSON.parse((await client.callTool({ name, arguments: args })).content[0].text);
 
 const hr = await call("kubesearch_search_releases", { query: "cert-manager", limit: 3 });
-console.log("\nsearch_releases cert-manager: total=%d top=%s count=%d", hr.total_matches, hr.results[0].id, hr.results[0].deployment_count);
+console.log("\nsearch_releases cert-manager: total=%d top=%s count=%d has_more=%s", hr.total_matches, hr.results[0].id, hr.results[0].deployment_count, hr.has_more);
+
+const img = await call("kubesearch_search_images", { query: "cert-manager", limit: 2 });
+const imgPage2 = await call("kubesearch_search_images", { query: "cert-manager", limit: 2, offset: 2 });
+const img1 = new Set(img.results.map((r) => r.repository));
+console.log("search_images: total=%d paging disjoint=%s", img.total_matches, imgPage2.results.every((r) => !img1.has(r.repository)));
 
 const grepStart = performance.now();
 const grep = await call("kubesearch_grep_values", { query: "cert-manager.io", limit: 2 });
@@ -54,8 +59,10 @@ console.log("repo_list_files: %d entries", ls.entries.length);
 const readme = ls.entries.find((e) => /readme/i.test(e.path)) ?? ls.entries.find((e) => e.type === "file");
 const file = await call("repo_read_file", { handle: clone.handle, path: readme.path });
 console.log("repo_read_file %s: %d bytes, starts: %j", file.path, file.bytes, file.content.slice(0, 40));
-const rgrep = await call("repo_grep", { handle: clone.handle, query: "the" });
+const rgrep = await call("repo_grep", { handle: clone.handle, query: "the", limit: 5 });
 console.log("repo_grep 'the': total_matches=%d", rgrep.total_matches);
+const rgrepCs = await call("repo_grep", { handle: clone.handle, query: "THE", limit: 5, case_sensitive: true });
+console.log("repo_grep case-sensitive narrows: %s", rgrepCs.total_matches <= rgrep.total_matches);
 
 // traversal must be rejected
 const escaped = await client.callTool({ name: "repo_read_file", arguments: { handle: clone.handle, path: "../../../../etc/passwd" } });

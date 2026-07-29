@@ -102,8 +102,13 @@ export async function buildImageIndex(db: Database): Promise<ImageIndex> {
 }
 
 /** Search the image index by repository substring (case-insensitive). */
-export function searchImages(index: ImageIndex, query: string, limit: number): { total: number; entries: ImageEntry[] } {
+export function searchImages(
+  index: ImageIndex,
+  query: string,
+  limit: number,
+  offset: number,
+): { total: number; entries: ImageEntry[] } {
   const q = query.toLowerCase();
   const matches = index.searchList.filter((e) => e.lower.includes(q));
-  return { total: matches.length, entries: matches.slice(0, limit).map((e) => e.item) };
+  return { total: matches.length, entries: matches.slice(offset, offset + limit).map((e) => e.item) };
 }

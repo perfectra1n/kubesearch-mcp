@@ -151,10 +151,33 @@ describe("summarizeValues over the release index", () => {
 describe("images", () => {
   it("indexes nested image.repository and supports substring search", async () => {
     const imageIndex = await buildImageIndex(db);
-    const { entries } = searchImages(imageIndex, "cert-manager", 25);
+    const { entries } = searchImages(imageIndex, "cert-manager", 25, 0);
     const entry = entries.find((e) => e.repository === "quay.io/jetstack/cert-manager-controller");
     expect(entry).toBeDefined();
     expect(entry!.tags).toContain("v1.14.0");
     expect(entry!.usageCount).toBe(1);
+  });
+
+  it("pages disjointly with offset while reporting the full total", async () => {
+    const imageIndex = await buildImageIndex(db);
+    const all = searchImages(imageIndex, "cert-manager", 25, 0);
+    expect(all.total).toBe(2);
+
+    const page0 = searchImages(imageIndex, "cert-manager", 1, 0);
+    const page1 = searchImages(imageIndex, "cert-manager", 1, 1);
+
+    expect(page0.total).toBe(2);
+    expect(page1.total).toBe(2);
+    expect(page0.entries[0]!.repository).not.toBe(page1.entries[0]!.repository);
+    expect([page0.entries[0]!.repository, page1.entries[0]!.repository].sort()).toEqual(
+      all.entries.map((e) => e.repository).sort(),
+    );
+  });
+
+  it("returns an empty page past the end", async () => {
+    const imageIndex = await buildImageIndex(db);
+    const past = searchImages(imageIndex, "cert-manager", 5, 2);
+    expect(past.entries).toEqual([]);
+    expect(past.total).toBe(2);
   });
 });

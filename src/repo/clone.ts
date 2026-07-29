@@ -255,11 +255,17 @@ export class RepoStore {
     }
   }
 
-  async grep(handle: string, query: string, glob?: string, maxResults = 100): Promise<RepoGrepResult> {
+  async grep(
+    handle: string,
+    query: string,
+    glob?: string,
+    maxResults = 100,
+    caseSensitive = false,
+  ): Promise<RepoGrepResult> {
     const record = this.touch(handle);
     if (query === "") throw new RepoError("Empty grep query.");
     const matcher = glob ? globToRegExp(glob) : null;
-    const needle = query.toLowerCase();
+    const needle = caseSensitive ? query : query.toLowerCase();
     const { files } = await walkFiles(record.dir);
     const matches: RepoGrepResult["matches"] = [];
     let total = 0;
@@ -276,7 +282,8 @@ export class RepoStore {
       if (text.includes("\u0000")) continue; // binary
       const lines = text.split("\n");
       for (let i = 0; i < lines.length; i++) {
-        if (lines[i]!.toLowerCase().includes(needle)) {
+        const haystack = caseSensitive ? lines[i]! : lines[i]!.toLowerCase();
+        if (haystack.includes(needle)) {
           total++;
           if (matches.length < maxResults) {
             const line = lines[i]!;
