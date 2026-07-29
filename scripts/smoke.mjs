@@ -14,7 +14,10 @@ await client.connect(transport);
 
 const tools = await client.listTools();
 console.log("TOOLS:", tools.tools.map((t) => t.name).join(", "));
-console.log("ANNOTATIONS (search_releases):", JSON.stringify(tools.tools.find((t) => t.name === "kubesearch_search_releases")?.annotations));
+console.log(
+  "ANNOTATIONS (search_releases):",
+  JSON.stringify(tools.tools.find((t) => t.name === "kubesearch_search_releases")?.annotations),
+);
 
 const prompts = await client.listPrompts();
 console.log("PROMPTS:", prompts.prompts.map((p) => p.name).join(", "));
@@ -22,21 +25,39 @@ console.log("PROMPTS:", prompts.prompts.map((p) => p.name).join(", "));
 const call = async (name, args) => JSON.parse((await client.callTool({ name, arguments: args })).content[0].text);
 
 const hr = await call("kubesearch_search_releases", { query: "cert-manager", limit: 3 });
-console.log("\nsearch_releases cert-manager: total=%d top=%s count=%d has_more=%s", hr.total_matches, hr.results[0].id, hr.results[0].deployment_count, hr.has_more);
+console.log(
+  "\nsearch_releases cert-manager: total=%d top=%s count=%d has_more=%s",
+  hr.total_matches,
+  hr.results[0].id,
+  hr.results[0].deployment_count,
+  hr.has_more,
+);
 
 const img = await call("kubesearch_search_images", { query: "cert-manager", limit: 2 });
 const imgPage2 = await call("kubesearch_search_images", { query: "cert-manager", limit: 2, offset: 2 });
 const img1 = new Set(img.results.map((r) => r.repository));
-console.log("search_images: total=%d paging disjoint=%s", img.total_matches, imgPage2.results.every((r) => !img1.has(r.repository)));
+console.log(
+  "search_images: total=%d paging disjoint=%s",
+  img.total_matches,
+  imgPage2.results.every((r) => !img1.has(r.repository)),
+);
 
 const grepStart = performance.now();
 const grep = await call("kubesearch_grep_values", { query: "cert-manager.io", limit: 2 });
-console.log("grep_values cert-manager.io: total_files=%d has_more=%s (%dms)", grep.total_files, grep.has_more, Math.round(performance.now() - grepStart));
+console.log(
+  "grep_values cert-manager.io: total_files=%d has_more=%s (%dms)",
+  grep.total_files,
+  grep.has_more,
+  Math.round(performance.now() - grepStart),
+);
 
 // paging must be disjoint and globally star-ranked
 const grepPage2 = await call("kubesearch_grep_values", { query: "cert-manager.io", limit: 2, offset: 2 });
 const page1Urls = new Set(grep.results.map((r) => r.file_url));
-console.log("grep_values paging disjoint:", grepPage2.results.every((r) => !page1Urls.has(r.file_url)));
+console.log(
+  "grep_values paging disjoint:",
+  grepPage2.results.every((r) => !page1Urls.has(r.file_url)),
+);
 
 // structuredContent check
 const raw = await client.callTool({ name: "kubesearch_status", arguments: {} });

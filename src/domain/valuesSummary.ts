@@ -31,11 +31,7 @@ export interface SummarizeOptions {
  * @param deployments Deployments for the chart, already sorted most-starred-first.
  * @param valuesByUrl Parsed `spec.values` keyed by deployment `fileUrl`.
  */
-export function summarizeValues(
-  deployments: Deployment[],
-  valuesByUrl: Map<string, unknown>,
-  opts: SummarizeOptions,
-): ValuesSummary {
+export function summarizeValues(deployments: Deployment[], valuesByUrl: Map<string, unknown>, opts: SummarizeOptions): ValuesSummary {
   // Aggregate over the most-starred deployments that actually have values.
   const withValues = deployments.filter((d) => valuesByUrl.has(d.fileUrl)).slice(0, SUMMARY_CAP);
 
@@ -48,12 +44,18 @@ export function summarizeValues(
     for (const leaf of leaves) {
       const path = normalizePath(leaf.path);
       let valset = seen.get(path);
-      if (!valset) { valset = new Set(); seen.set(path, valset); }
+      if (!valset) {
+        valset = new Set();
+        seen.set(path, valset);
+      }
       valset.add(leaf.value);
     }
     for (const [path, values] of seen) {
       let entry = agg.get(path);
-      if (!entry) { entry = { setBy: 0, values: new Map() }; agg.set(path, entry); }
+      if (!entry) {
+        entry = { setBy: 0, values: new Map() };
+        agg.set(path, entry);
+      }
       entry.setBy += 1;
       for (const v of values) entry.values.set(v, (entry.values.get(v) ?? 0) + 1);
     }

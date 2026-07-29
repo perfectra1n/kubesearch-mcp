@@ -64,7 +64,11 @@ export class DataStore {
   /** Ensure data is loaded; trigger a non-blocking refresh if the TTL elapsed. */
   async ready(): Promise<void> {
     if (!this.db) {
-      if (!this.initPromise) this.initPromise = this.load().catch((err) => { this.initPromise = null; throw err; });
+      if (!this.initPromise)
+        this.initPromise = this.load().catch((err) => {
+          this.initPromise = null;
+          throw err;
+        });
       await this.initPromise;
       return;
     }
@@ -128,7 +132,9 @@ export class DataStore {
   private runRefresh(): Promise<void> {
     if (this.refreshPromise) return this.refreshPromise;
     this.refreshPromise = this.refresh()
-      .then(() => { this.refreshFailures = 0; })
+      .then(() => {
+        this.refreshFailures = 0;
+      })
       .catch((err) => {
         this.refreshFailures++;
         log.warn(`background refresh failed: ${(err as Error).message}`);
@@ -148,9 +154,12 @@ export class DataStore {
    */
   startAutoRefresh(): () => void {
     if (!this.cfg.autoRefresh) return () => {};
-    const timer = setInterval(() => {
-      if (this.db) void this.maybeRefresh();
-    }, Math.min(this.cfg.refreshTtlMs, 5 * 60_000));
+    const timer = setInterval(
+      () => {
+        if (this.db) void this.maybeRefresh();
+      },
+      Math.min(this.cfg.refreshTtlMs, 5 * 60_000),
+    );
     timer.unref?.();
     return () => clearInterval(timer);
   }
@@ -204,7 +213,11 @@ export class DataStore {
       // it underneath would abort that build, so wait for the ones in flight.
       const pending = [...this.buildsInFlight];
       const closeOld = (): void => {
-        try { old.close(); } catch { /* ignore */ }
+        try {
+          old.close();
+        } catch {
+          /* ignore */
+        }
       };
       if (pending.length === 0) closeOld();
       else void Promise.allSettled(pending).then(closeOld);
@@ -240,14 +253,18 @@ export class DataStore {
 
   getReleaseIndex(): Promise<ReleaseIndex> {
     if (!this.releaseIndexPromise) {
-      this.releaseIndexPromise = this.startBuild(buildReleaseIndex, () => { this.releaseIndexPromise = null; });
+      this.releaseIndexPromise = this.startBuild(buildReleaseIndex, () => {
+        this.releaseIndexPromise = null;
+      });
     }
     return this.releaseIndexPromise;
   }
 
   getImageIndex(): Promise<ImageIndex> {
     if (!this.imageIndexPromise) {
-      this.imageIndexPromise = this.startBuild(buildImageIndex, () => { this.imageIndexPromise = null; });
+      this.imageIndexPromise = this.startBuild(buildImageIndex, () => {
+        this.imageIndexPromise = null;
+      });
     }
     return this.imageIndexPromise;
   }
@@ -263,8 +280,7 @@ export class DataStore {
   /** Look up an indexed repo (e.g. "onedr0p/home-ops") to resolve its clone URL + branch. */
   getRepoByName(repoName: string): { url: string; branch: string | null } | null {
     const row = prepared(this.require(), "select url, branch from repo where repo_name = ?").get(repoName) as
-      | { url: string | null; branch: string | null }
-      | undefined;
+      { url: string | null; branch: string | null } | undefined;
     if (!row || !row.url) return null;
     return { url: row.url, branch: row.branch };
   }
@@ -284,7 +300,11 @@ export class DataStore {
     ).all(...urls, ...urls) as Array<{ url: string; val: string | null }>;
     for (const row of rows) {
       if (!row.val) continue;
-      try { out.set(row.url, JSON.parse(row.val)); } catch { /* skip malformed */ }
+      try {
+        out.set(row.url, JSON.parse(row.val));
+      } catch {
+        /* skip malformed */
+      }
     }
     return out;
   }
@@ -309,7 +329,11 @@ export class DataStore {
     this.releaseIndexPromise = null;
     this.imageIndexPromise = null;
     if (this.db) {
-      try { this.db.close(); } catch { /* ignore */ }
+      try {
+        this.db.close();
+      } catch {
+        /* ignore */
+      }
       this.db = null;
     }
   }

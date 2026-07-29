@@ -252,15 +252,25 @@ export class RepoStore {
         const rel = path.relative(record.dir, abs);
         if (d.isDirectory()) {
           if (!matcher) entries.push({ path: rel, type: "dir" });
-          if (entries.length >= LIST_MAX_ENTRIES) { truncated = true; return; }
+          if (entries.length >= LIST_MAX_ENTRIES) {
+            truncated = true;
+            return;
+          }
           await walk(abs);
           if (truncated) return;
         } else if (d.isFile()) {
           if (matcher && !matcher.test(rel)) continue;
           let size: number | undefined;
-          try { size = (await fsp.stat(abs)).size; } catch { /* ignore */ }
+          try {
+            size = (await fsp.stat(abs)).size;
+          } catch {
+            /* ignore */
+          }
           entries.push({ path: rel, type: "file", size });
-          if (entries.length >= LIST_MAX_ENTRIES) { truncated = true; return; }
+          if (entries.length >= LIST_MAX_ENTRIES) {
+            truncated = true;
+            return;
+          }
         }
       }
     };
@@ -291,13 +301,7 @@ export class RepoStore {
     }
   }
 
-  async grep(
-    handle: string,
-    query: string,
-    glob?: string,
-    maxResults = 100,
-    caseSensitive = false,
-  ): Promise<RepoGrepResult> {
+  async grep(handle: string, query: string, glob?: string, maxResults = 100, caseSensitive = false): Promise<RepoGrepResult> {
     const record = this.touch(handle);
     if (query === "") throw new RepoError("Empty grep query.");
     const matcher = glob ? globToRegExp(glob) : null;
@@ -311,10 +315,18 @@ export class RepoStore {
       if (matcher && !matcher.test(rel)) continue;
       const abs = path.join(record.dir, rel);
       let stat: fs.Stats;
-      try { stat = await fsp.stat(abs); } catch { continue; }
+      try {
+        stat = await fsp.stat(abs);
+      } catch {
+        continue;
+      }
       if (stat.size > GREP_FILE_MAX_BYTES) continue;
       let text: string;
-      try { text = await fsp.readFile(abs, "utf-8"); } catch { continue; }
+      try {
+        text = await fsp.readFile(abs, "utf-8");
+      } catch {
+        continue;
+      }
       if (text.includes("\u0000")) continue; // binary
       const lines = text.split("\n");
       for (let i = 0; i < lines.length; i++) {
@@ -429,7 +441,13 @@ export class RepoStore {
 // --- helpers -------------------------------------------------------------
 
 function cleanGitError(message: string): string {
-  return message.split("\n").map((l) => l.trim()).filter(Boolean).slice(-3).join("; ").slice(0, 300);
+  return message
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(-3)
+    .join("; ")
+    .slice(0, 300);
 }
 
 async function rmDir(dir: string): Promise<void> {

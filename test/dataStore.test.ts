@@ -150,25 +150,31 @@ describe("DataStore", () => {
 
   it("creates url lookup indexes on the extended database during load", async () => {
     const { cacheDir, cleanup } = makeFixtureCacheDir("test");
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      throw new Error("network should not be used");
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network should not be used");
+      }),
+    );
     const store = new DataStore(testConfig(cacheDir));
     cleanups.push(() => store.close(), cleanup);
     await store.ready();
 
-    const names = (
-      store.database.prepare("select name from ext.sqlite_master where type='index'").all() as Array<{ name: string }>
-    ).map((row) => row.name);
+    const names = (store.database.prepare("select name from ext.sqlite_master where type='index'").all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    );
     expect(names).toContain("idx_fhrv_url");
     expect(names).toContain("idx_ahav_url");
   });
 
   it("getValues round-trips parsed values for known urls", async () => {
     const { cacheDir, cleanup } = makeFixtureCacheDir("test");
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      throw new Error("network should not be used");
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network should not be used");
+      }),
+    );
     const store = new DataStore(testConfig(cacheDir));
     cleanups.push(() => store.close(), cleanup);
     await store.ready();
@@ -182,9 +188,12 @@ describe("DataStore", () => {
 
   it("applies performance pragmas to the connection", async () => {
     const { cacheDir, cleanup } = makeFixtureCacheDir("test");
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      throw new Error("network should not be used");
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network should not be used");
+      }),
+    );
     const store = new DataStore(testConfig(cacheDir));
     cleanups.push(() => store.close(), cleanup);
     await store.ready();
@@ -194,9 +203,12 @@ describe("DataStore", () => {
 
   it("warms both indexes during load and serves later calls without re-querying", async () => {
     const { cacheDir, cleanup } = makeFixtureCacheDir("test");
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      throw new Error("network should not be used");
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network should not be used");
+      }),
+    );
     const prepareSpy = vi.spyOn(Database.prototype, "prepare");
 
     const store = new DataStore(testConfig(cacheDir));
@@ -222,9 +234,12 @@ describe("DataStore", () => {
     fs.writeFileSync(stale, "x");
     const old = (Date.now() - 2 * HOUR) / 1000;
     fs.utimesSync(stale, old, old);
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      throw new Error("network should not be used");
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network should not be used");
+      }),
+    );
 
     const store = new DataStore(testConfig(cacheDir));
     cleanups.push(() => store.close(), cleanup);

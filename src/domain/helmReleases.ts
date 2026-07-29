@@ -184,7 +184,12 @@ export async function buildReleaseIndex(db: Database): Promise<ReleaseIndex> {
 }
 
 /** Search release groups by chart-name substring (case-insensitive). */
-export function searchReleaseGroups(index: ReleaseIndex, query: string, limit: number, offset: number): { total: number; groups: ReleaseGroup[] } {
+export function searchReleaseGroups(
+  index: ReleaseIndex,
+  query: string,
+  limit: number,
+  offset: number,
+): { total: number; groups: ReleaseGroup[] } {
   const q = query.toLowerCase();
   const matches = index.searchList.filter((e) => e.lower.includes(q));
   return { total: matches.length, groups: matches.slice(offset, offset + limit).map((e) => e.item) };

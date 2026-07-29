@@ -114,16 +114,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const refreshHours = parseIntEnv(env.KUBESEARCH_REFRESH_HOURS, 24);
   // 0 (or negative) disables refreshing: cached data is used forever once present.
   const autoRefresh = refreshHours > 0;
-  const cacheDir =
-    env.KUBESEARCH_CACHE_DIR && env.KUBESEARCH_CACHE_DIR.trim() !== "" ? env.KUBESEARCH_CACHE_DIR : defaultCacheDir();
+  const cacheDir = env.KUBESEARCH_CACHE_DIR && env.KUBESEARCH_CACHE_DIR.trim() !== "" ? env.KUBESEARCH_CACHE_DIR : defaultCacheDir();
   const clone: CloneConfig = {
     enabled: parseBoolEnv(env.KUBESEARCH_ENABLE_CLONE, true),
     allowedHosts: parseListEnv(env.KUBESEARCH_CLONE_ALLOWED_HOSTS),
     allowPrivate: parseBoolEnv(env.KUBESEARCH_CLONE_ALLOW_PRIVATE, false),
-    dir:
-      env.KUBESEARCH_CLONE_DIR && env.KUBESEARCH_CLONE_DIR.trim() !== ""
-        ? env.KUBESEARCH_CLONE_DIR
-        : path.join(cacheDir, "clones"),
+    dir: env.KUBESEARCH_CLONE_DIR && env.KUBESEARCH_CLONE_DIR.trim() !== "" ? env.KUBESEARCH_CLONE_DIR : path.join(cacheDir, "clones"),
     ttlMs: parseIntEnv(env.KUBESEARCH_CLONE_TTL_MINUTES, 30) * 60 * 1000,
     refreshOnClone: parseBoolEnv(env.KUBESEARCH_CLONE_REFRESH_ON_CLONE, true),
     maxRepos: parseIntEnv(env.KUBESEARCH_CLONE_MAX_REPOS, 5),
@@ -145,7 +141,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     refreshTtlMs: (autoRefresh ? refreshHours : 24) * 60 * 60 * 1000,
     autoRefresh,
     githubToken: env.GITHUB_TOKEN && env.GITHUB_TOKEN.trim() !== "" ? env.GITHUB_TOKEN : undefined,
-    upstreamRepo: env.KUBESEARCH_UPSTREAM_REPO && env.KUBESEARCH_UPSTREAM_REPO.trim() !== "" ? env.KUBESEARCH_UPSTREAM_REPO : "whazor/k8s-at-home-search",
+    upstreamRepo:
+      env.KUBESEARCH_UPSTREAM_REPO && env.KUBESEARCH_UPSTREAM_REPO.trim() !== ""
+        ? env.KUBESEARCH_UPSTREAM_REPO
+        : "whazor/k8s-at-home-search",
     downloadTimeoutMs: parseIntEnv(env.KUBESEARCH_DOWNLOAD_TIMEOUT_SECONDS, 300) * 1000,
     maxDbBytes: parseIntEnv(env.KUBESEARCH_MAX_DB_MB, 512) * 1024 * 1024,
     clone,

@@ -34,7 +34,6 @@ export function registerRepoReadFile(server: McpServer, repos: RepoStore): void 
       },
       annotations: READ_ONLY,
     },
-    async ({ handle, path, max_bytes }) =>
-      guarded(async () => repos.read(handle, path, max_bytes) as unknown as Record<string, unknown>),
+    async ({ handle, path, max_bytes }) => guarded(async () => repos.read(handle, path, max_bytes) as unknown as Record<string, unknown>),
   );
 }

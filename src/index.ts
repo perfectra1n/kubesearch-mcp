@@ -47,8 +47,16 @@ async function main(): Promise<void> {
 
     void (async () => {
       stopRefresh();
-      try { await httpHandle?.shutdown(); } catch (err) { log.warn(`http shutdown failed: ${(err as Error).message}`); }
-      try { await repos.cleanupAll(); } catch (err) { log.warn(`clone cleanup failed: ${(err as Error).message}`); }
+      try {
+        await httpHandle?.shutdown();
+      } catch (err) {
+        log.warn(`http shutdown failed: ${(err as Error).message}`);
+      }
+      try {
+        await repos.cleanupAll();
+      } catch (err) {
+        log.warn(`clone cleanup failed: ${(err as Error).message}`);
+      }
       store.close();
       process.exit(0);
     })();

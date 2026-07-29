@@ -138,7 +138,10 @@ describe("grepValues", () => {
 describe("summarizeValues over the release index", () => {
   it("digests how the cert-manager group is configured", () => {
     const group = index.groups.get("ghcr.io-home-operations-charts-mirror-cert-manager")!;
-    const valuesByUrl = fixtureValues(db, group.deployments.map((d) => d.fileUrl));
+    const valuesByUrl = fixtureValues(
+      db,
+      group.deployments.map((d) => d.fileUrl),
+    );
     const summary = summarizeValues(group.deployments, valuesByUrl, { top: 25, examples: 1 });
     expect(summary.analyzedDeployments).toBe(group.deployments.length);
     const installCrds = summary.commonSettings.find((c) => c.path === "installCRDs");
@@ -169,9 +172,7 @@ describe("images", () => {
     expect(page0.total).toBe(2);
     expect(page1.total).toBe(2);
     expect(page0.entries[0]!.repository).not.toBe(page1.entries[0]!.repository);
-    expect([page0.entries[0]!.repository, page1.entries[0]!.repository].sort()).toEqual(
-      all.entries.map((e) => e.repository).sort(),
-    );
+    expect([page0.entries[0]!.repository, page1.entries[0]!.repository].sort()).toEqual(all.entries.map((e) => e.repository).sort());
   });
 
   it("returns an empty page past the end", async () => {

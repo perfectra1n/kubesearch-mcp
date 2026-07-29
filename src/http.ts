@@ -249,7 +249,11 @@ export function startHttp(cfg: Config, store: DataStore, repos: RepoStore): Prom
       [...sessions.keys()].map(async (id) => {
         const session = sessions.get(id);
         if (!session) return;
-        try { await session.transport.close(); } catch { /* already gone */ }
+        try {
+          await session.transport.close();
+        } catch {
+          /* already gone */
+        }
         dropSession(id);
       }),
     );

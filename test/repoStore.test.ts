@@ -92,12 +92,7 @@ describe("clone concurrency cap", () => {
   it("never runs more git clones at once than the configured maximum", async () => {
     const store = makeStore({ maxRepos: 10, maxConcurrent: 2 });
 
-    await Promise.all([
-      store.clone("owner/one"),
-      store.clone("owner/two"),
-      store.clone("owner/three"),
-      store.clone("owner/four"),
-    ]);
+    await Promise.all([store.clone("owner/one"), store.clone("owner/two"), store.clone("owner/three"), store.clone("owner/four")]);
 
     expect(store.clones).toBe(4);
     expect(store.peakConcurrent).toBeLessThanOrEqual(2);

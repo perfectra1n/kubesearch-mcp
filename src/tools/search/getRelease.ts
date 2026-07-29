@@ -262,8 +262,7 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
           has_more: offset + page.length < group.deploymentCount,
           deployments: page.map(slimRepo),
           next_step:
-            'Use view:"values" with a repo from this list to fetch its spec.values. Add value_paths to keep the ' +
-            "response small.",
+            'Use view:"values" with a repo from this list to fetch its spec.values. Add value_paths to keep the ' + "response small.",
         });
       }
 
@@ -272,9 +271,7 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
       if (repo) {
         selected = filterByRepo(selected, repo);
         if (selected.length === 0) {
-          return fail(
-            `No deployment from a repo matching "${repo}" in release "${id}". Use view:"deployments" to list the repos.`,
-          );
+          return fail(`No deployment from a repo matching "${repo}" in release "${id}". Use view:"deployments" to list the repos.`);
         }
       }
       const page = selected.slice(offset, offset + limit);

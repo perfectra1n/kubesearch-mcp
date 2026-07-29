@@ -61,33 +61,36 @@ export async function resolveLatestTag(
   retry: RetryOptions = {},
 ): Promise<ResolvedRelease> {
   const url = `https://api.github.com/repos/${repo}/releases?per_page=10`;
-  return withRetry(async () => {
-    const res = await fetch(url, {
-      headers: githubHeaders(token, prior?.etag),
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
-    });
-    if (res.status === 304 && prior) {
-      return { tag: prior.tag, etag: prior.etag, notModified: true };
-    }
-    if (!res.ok) {
-      const hint = res.status === 403 ? " (rate limited — set GITHUB_TOKEN to raise the limit)" : "";
-      throw new HttpStatusError(`GitHub API ${res.status} resolving latest release for ${repo}${hint}`, res.status);
-    }
-    const etag = res.headers.get("etag");
-    const releases = (await res.json()) as Array<{
-      tag_name?: string;
-      assets?: Array<{ name?: string }>;
-    }>;
-    if (!Array.isArray(releases) || releases.length === 0) {
-      throw new Error(`No releases found for ${repo}`);
-    }
-    for (const release of releases) {
-      const hasDb = release.assets?.some((a) => a.name === "repos.db");
-      if (release.tag_name && hasDb) return { tag: release.tag_name, etag, notModified: false };
-    }
-    // Fallback: first tag even if asset listing was unexpected.
-    const first = releases[0]?.tag_name;
-    if (first) return { tag: first, etag, notModified: false };
-    throw new Error(`No usable release tag for ${repo}`);
-  }, { retryable: apiRetryable, ...retry });
+  return withRetry(
+    async () => {
+      const res = await fetch(url, {
+        headers: githubHeaders(token, prior?.etag),
+        signal: AbortSignal.timeout(API_TIMEOUT_MS),
+      });
+      if (res.status === 304 && prior) {
+        return { tag: prior.tag, etag: prior.etag, notModified: true };
+      }
+      if (!res.ok) {
+        const hint = res.status === 403 ? " (rate limited — set GITHUB_TOKEN to raise the limit)" : "";
+        throw new HttpStatusError(`GitHub API ${res.status} resolving latest release for ${repo}${hint}`, res.status);
+      }
+      const etag = res.headers.get("etag");
+      const releases = (await res.json()) as Array<{
+        tag_name?: string;
+        assets?: Array<{ name?: string }>;
+      }>;
+      if (!Array.isArray(releases) || releases.length === 0) {
+        throw new Error(`No releases found for ${repo}`);
+      }
+      for (const release of releases) {
+        const hasDb = release.assets?.some((a) => a.name === "repos.db");
+        if (release.tag_name && hasDb) return { tag: release.tag_name, etag, notModified: false };
+      }
+      // Fallback: first tag even if asset listing was unexpected.
+      const first = releases[0]?.tag_name;
+      if (first) return { tag: first, etag, notModified: false };
+      throw new Error(`No usable release tag for ${repo}`);
+    },
+    { retryable: apiRetryable, ...retry },
+  );
 }

@@ -20,10 +20,7 @@ export function mergeHelmURL(url: string): string {
   // - oci://ghcr.io/bjw-s/helm
   // - oci://ghcr.io/bjw-s-labs/app-template
   // - oci://ghcr.io/bjw-s-labs/charts
-  if (
-    cleanUrl.includes("bjw-s.github.io/helm-charts") ||
-    cleanUrl.match(/ghcr\.io\/bjw-s(-labs)?\/(helm|charts|app-template)/)
-  ) {
+  if (cleanUrl.includes("bjw-s.github.io/helm-charts") || cleanUrl.match(/ghcr\.io\/bjw-s(-labs)?\/(helm|charts|app-template)/)) {
     return "oci://ghcr.io/bjw-s-labs/charts/";
   }
 
@@ -51,12 +48,7 @@ export function mergeHelmURL(url: string): string {
  * @param release_name HelmRelease metadata.name
  */
 export function releaseKey(_url: string, chart_name: string, release_name: string): string {
-  const url = _url
-    .replace("https://", "")
-    .replace("http://", "")
-    .replace("oci://", "")
-    .replace(/\/$/, "")
-    .replaceAll("/", "-");
+  const url = _url.replace("https://", "").replace("http://", "").replace("oci://", "").replace(/\/$/, "").replaceAll("/", "-");
 
   let key: string;
   // OCI Repo's tend to have the chart name as the last part of the URL

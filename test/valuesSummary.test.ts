@@ -27,11 +27,7 @@ function dep(repo: string, stars: number, fileUrl: string, chartVersion: string 
 }
 
 describe("summarizeValues", () => {
-  const deployments = [
-    dep("a/ops", 900, "u1"),
-    dep("b/ops", 800, "u2"),
-    dep("c/ops", 700, "u3"),
-  ];
+  const deployments = [dep("a/ops", 900, "u1"), dep("b/ops", 800, "u2"), dep("c/ops", 700, "u3")];
   const valuesByUrl = new Map<string, unknown>([
     ["u1", { server: { persistentVolume: { size: "20Gi" }, retentionPeriod: "14d" }, dashboards: { enabled: true } }],
     ["u2", { server: { persistentVolume: { size: "20Gi" }, retentionPeriod: "90d" }, dashboards: { enabled: true } }],
