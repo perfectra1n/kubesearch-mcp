@@ -9,7 +9,12 @@
 [tools]
 # Keep in step with package.json `engines.node` (the minimum supported runtime)
 # and the Docker base image. Renovate updates them together.
-node = "24.18.0"
+# compile = false resolves the prebuilt binary rather than a source build. It is
+# explicit because the resolution would otherwise depend on the host: on NixOS
+# mise falls back to compiling from source, which bakes a source tarball into
+# mise.lock and then fails `mise install --locked` on every other machine.
+# Regenerate the lockfile with `MISE_NODE_COMPILE=0 mise lock` on such a host.
+node = { version = "24.18.0", compile = false }
 lefthook = "2.1.10"
 # docker/healthcheck.sh is linted by the pre-commit hook.
 shellcheck = "0.11.0"
