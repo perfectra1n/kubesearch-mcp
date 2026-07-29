@@ -45,7 +45,7 @@ describe("DataStore", () => {
 
     await store.ready();
     expect(store.currentTag).toBe("test");
-    expect(store.status().reposIndexed).toBe(2);
+    expect(store.status().reposIndexed).toBe(3);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

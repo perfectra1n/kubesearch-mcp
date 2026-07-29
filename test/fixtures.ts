@@ -68,6 +68,11 @@ export function writeFixtureData(mainPath: string, extPath: string): void {
   main
     .prepare(`INSERT INTO repo (repo_name, url, branch, stars) VALUES (?,?,?,?)`)
     .run("carpenike/k8s-gitops", "https://github.com/carpenike/k8s-gitops", "main", 309);
+  // Highest-starred repo, deliberately inserted last everywhere (including the
+  // values table) so ranking bugs that return rows in table-scan order fail.
+  main
+    .prepare(`INSERT INTO repo (repo_name, url, branch, stars) VALUES (?,?,?,?)`)
+    .run("bigstar/cluster", "https://github.com/bigstar/cluster", "main", 9999);
 
   // OCI cert-manager in onedr0p (matches the real /hr id).
   main
@@ -103,6 +108,17 @@ export function writeFixtureData(mainPath: string, extPath: string): void {
     .run("jetstack", "flux-system", "https://charts.jetstack.io", "1h", "carpenike/k8s-gitops", 5,
       "https://github.com/carpenike/k8s-gitops/blob/main/k8s/jetstack-repo.yaml", "2026-05-20T00:00:00Z");
 
+  // Same jetstack chart source as carpenike, so this joins that group.
+  main
+    .prepare(`INSERT INTO flux_helm_release VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run("cert-manager", "cert-manager", "v1.14.1", "cert-manager", "bigstar/cluster", null, null,
+      "HelmRepository", 22, "https://github.com/bigstar/cluster/blob/main/apps/cert-manager/hr.yaml",
+      "2026-06-10T00:00:00Z", "jetstack", "flux-system");
+  main
+    .prepare(`INSERT INTO flux_helm_repo VALUES (?,?,?,?,?,?,?,?)`)
+    .run("jetstack", "flux-system", "https://charts.jetstack.io", "1h", "bigstar/cluster", 5,
+      "https://github.com/bigstar/cluster/blob/main/apps/jetstack-repo.yaml", "2026-06-10T00:00:00Z");
+
   main.close();
 
   const ext = new Database(extPath);
@@ -128,6 +144,13 @@ export function writeFixtureData(mainPath: string, extPath: string): void {
     .run(
       "https://github.com/carpenike/k8s-gitops/blob/main/k8s/cert-manager/hr.yaml",
       JSON.stringify({ installCRDs: true, replicaCount: 1 }),
+    );
+  // Written last on purpose — see the repo insert above.
+  ext
+    .prepare(`INSERT INTO flux_helm_release_values VALUES (?,?)`)
+    .run(
+      "https://github.com/bigstar/cluster/blob/main/apps/cert-manager/hr.yaml",
+      JSON.stringify({ installCRDs: true, replicaCount: 3, prometheus: { enabled: true } }),
     );
   ext.close();
 }

@@ -103,6 +103,36 @@ describe("grepValues", () => {
     expect(grepValues(db, index, "CERT-MANAGER.IO", 30, true).totalFiles).toBe(0);
     expect(grepValues(db, index, "CERT-MANAGER.IO", 30, false).totalFiles).toBeGreaterThanOrEqual(1);
   });
+
+  it("ranks the whole match set by stars, not by table scan order", () => {
+    // installCRDs is in all three fixture files; the 9999-star repo's row is
+    // written last, so returning it first proves ranking precedes truncation.
+    const res = grepValues(db, index, "installCRDs", 1, false);
+    expect(res.matches).toHaveLength(1);
+    expect(res.matches[0]!.repo).toBe("bigstar/cluster");
+  });
+
+  it("reports the full match count even when the limit truncates the page", () => {
+    expect(grepValues(db, index, "installCRDs", 1, false).totalFiles).toBe(3);
+    expect(grepValues(db, index, "installCRDs", 30, false).totalFiles).toBe(3);
+  });
+
+  it("pages disjointly and in descending star order", () => {
+    const page0 = grepValues(db, index, "installCRDs", 1, false, 0);
+    const page1 = grepValues(db, index, "installCRDs", 1, false, 1);
+    const page2 = grepValues(db, index, "installCRDs", 1, false, 2);
+    const urls = [page0, page1, page2].map((p) => p.matches[0]!.fileUrl);
+    expect(new Set(urls).size).toBe(3);
+    expect(page0.matches[0]!.stars).toBe(9999);
+    expect(page1.matches[0]!.stars).toBe(2819);
+    expect(page2.matches[0]!.stars).toBe(309);
+  });
+
+  it("returns an empty page past the end without losing the total", () => {
+    const res = grepValues(db, index, "installCRDs", 10, false, 3);
+    expect(res.matches).toHaveLength(0);
+    expect(res.totalFiles).toBe(3);
+  });
 });
 
 describe("summarizeValues over the release index", () => {
