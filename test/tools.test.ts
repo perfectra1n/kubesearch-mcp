@@ -71,6 +71,15 @@ describe("search tools over fixture data", () => {
     expect(body.results.some((r) => r.id.includes("cert-manager"))).toBe(true);
   });
 
+  it("echoes which repos a values-view filter actually resolved to", async () => {
+    const result = await client.callTool({
+      name: "kubesearch_get_release",
+      arguments: { id: "charts.jetstack.io-cert-manager", view: "values", repo: "carpenike" },
+    });
+    const body = result.structuredContent as { matched_repos: string[] };
+    expect(body.matched_repos).toEqual(["carpenike/k8s-gitops"]);
+  });
+
   it("greps values and reports paging state", async () => {
     const result = await client.callTool({
       name: "kubesearch_grep_values",
