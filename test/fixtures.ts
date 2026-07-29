@@ -12,7 +12,41 @@ export function makeFixtureDb(): { db: Database.Database; cleanup: () => void } 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kubesearch-fixture-"));
   const mainPath = path.join(dir, "repos.db");
   const extPath = path.join(dir, "repos-extended.db");
+  writeFixtureData(mainPath, extPath);
 
+  const db = new Database(mainPath, { readonly: true, fileMustExist: true });
+  db.exec(`ATTACH DATABASE '${extPath.replaceAll("'", "''")}' AS ext`);
+
+  return {
+    db,
+    cleanup: () => {
+      db.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    },
+  };
+}
+
+/**
+ * Populate a cache directory the way DataStore expects it on disk
+ * (tagged database files + meta.json), so DataStore/HTTP tests run offline.
+ */
+export function makeFixtureCacheDir(
+  tag = "test",
+  opts: { fetchedAt?: number; etag?: string } = {},
+): { cacheDir: string; cleanup: () => void } {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "kubesearch-cache-"));
+  writeFixtureData(path.join(cacheDir, `repos-${tag}.db`), path.join(cacheDir, `repos-extended-${tag}.db`));
+  const meta: Record<string, unknown> = { tag, fetchedAt: opts.fetchedAt ?? Date.now() };
+  if (opts.etag) meta.etag = opts.etag;
+  fs.writeFileSync(path.join(cacheDir, "meta.json"), JSON.stringify(meta));
+  return {
+    cacheDir,
+    cleanup: () => fs.rmSync(cacheDir, { recursive: true, force: true }),
+  };
+}
+
+/** Write the fixture dataset to a pair of database files. */
+export function writeFixtureData(mainPath: string, extPath: string): void {
   const main = new Database(mainPath);
   main.exec(`
     CREATE TABLE repo (repo_name text primary key, url text, branch text, stars integer);
@@ -96,15 +130,4 @@ export function makeFixtureDb(): { db: Database.Database; cleanup: () => void } 
       JSON.stringify({ installCRDs: true, replicaCount: 1 }),
     );
   ext.close();
-
-  const db = new Database(mainPath, { readonly: true, fileMustExist: true });
-  db.exec(`ATTACH DATABASE '${extPath.replaceAll("'", "''")}' AS ext`);
-
-  return {
-    db,
-    cleanup: () => {
-      db.close();
-      fs.rmSync(dir, { recursive: true, force: true });
-    },
-  };
 }

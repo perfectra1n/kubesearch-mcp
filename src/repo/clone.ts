@@ -113,7 +113,7 @@ export class RepoStore {
         await this.gitUpdate(record.dir, record.branch);
         updated = true;
       } catch (err) {
-        log(`refresh of ${record.url} failed, serving existing copy: ${cleanGitError((err as Error).message)}`);
+        log.warn(`refresh of ${record.url} failed, serving existing copy: ${cleanGitError((err as Error).message)}`);
       }
     }
     const { files, size } = await walkFiles(record.dir);

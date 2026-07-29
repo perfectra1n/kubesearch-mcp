@@ -24,6 +24,10 @@ export interface Config {
   githubToken: string | undefined;
   /** Upstream repo that publishes the databases. */
   upstreamRepo: string;
+  /** Overall wall-clock limit (ms) for downloading one database asset. */
+  downloadTimeoutMs: number;
+  /** Reject database downloads larger than this many bytes. */
+  maxDbBytes: number;
   /** Repository clone/review feature. */
   clone: CloneConfig;
 }
@@ -124,6 +128,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     autoRefresh,
     githubToken: env.GITHUB_TOKEN && env.GITHUB_TOKEN.trim() !== "" ? env.GITHUB_TOKEN : undefined,
     upstreamRepo: env.KUBESEARCH_UPSTREAM_REPO && env.KUBESEARCH_UPSTREAM_REPO.trim() !== "" ? env.KUBESEARCH_UPSTREAM_REPO : "whazor/k8s-at-home-search",
+    downloadTimeoutMs: parseIntEnv(env.KUBESEARCH_DOWNLOAD_TIMEOUT_SECONDS, 300) * 1000,
+    maxDbBytes: parseIntEnv(env.KUBESEARCH_MAX_DB_MB, 512) * 1024 * 1024,
     clone,
   };
 }
