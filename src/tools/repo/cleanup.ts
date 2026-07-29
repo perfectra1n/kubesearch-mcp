@@ -14,6 +14,10 @@ export function registerRepoCleanup(server: McpServer, repos: RepoStore): void {
       inputSchema: {
         handle: z.string().min(1).describe("The clone handle from repo_clone."),
       },
+      outputSchema: {
+        handle: z.string(),
+        removed: z.boolean(),
+      },
       annotations: { readOnlyHint: false, openWorldHint: false, idempotentHint: true, destructiveHint: false },
     },
     async ({ handle }) => guarded(async () => ({ handle, removed: await repos.cleanup(handle) })),

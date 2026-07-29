@@ -5,7 +5,7 @@ import type { Deployment } from "../../domain/types.js";
 import { summarizeValues } from "../../domain/valuesSummary.js";
 import { projectPaths } from "../../util/jsonWalk.js";
 import { helmReleaseDetailUrl } from "../../util/links.js";
-import { fail, ok, READ_ONLY } from "../helpers.js";
+import { fail, ok, uniq, READ_ONLY } from "../helpers.js";
 
 /** Soft budget (bytes of serialized JSON) for the `values` drill-down view. */
 const VALUES_VIEW_BUDGET = 24_000;
@@ -25,6 +25,58 @@ function slimRepo(d: Deployment) {
     source_tag: d.sourceTag,
     resolved_chart: d.resolvedChart,
   };
+}
+
+/**
+ * Restrict deployments to one repo. An exact match wins outright — otherwise
+ * asking for "prod/app" would silently also pull in "prod/app-staging" and
+ * spend the response budget on repos the caller didn't ask for. Substring
+ * matching stays as a fallback so partial input ("onedr0p") still works.
+ */
+export function filterByRepo(deployments: Deployment[], repo: string): Deployment[] {
+  const needle = repo.toLowerCase();
+  const exact = deployments.filter((d) => d.repo.toLowerCase() === needle);
+  return exact.length > 0 ? exact : deployments.filter((d) => d.repo.toLowerCase().includes(needle));
+}
+
+/**
+ * Serialize a page of deployments under a response byte budget.
+ *
+ * Two rules keep every deployment reachable. The first entry is always
+ * returned in full, even if it alone exceeds the budget — paging past an
+ * oversized document doesn't help, since it is simply first on whatever page
+ * contains it, so `{repo, limit: 1}` has to work. After that, an entry too
+ * large for the remaining budget is skipped individually and the budget keeps
+ * filling with the smaller entries behind it.
+ */
+export function buildValuesPage(
+  page: Deployment[],
+  valuesByUrl: Map<string, unknown>,
+  valuePaths: string[] | undefined,
+  budgetBytes: number,
+): { deployments: Array<Record<string, unknown>>; omitted: number } {
+  let budget = budgetBytes;
+  let omitted = 0;
+
+  const deployments = page.map((d, i) => {
+    const raw = valuesByUrl.get(d.fileUrl) ?? null;
+    const values = valuePaths && valuePaths.length > 0 ? projectPaths(raw, valuePaths) : raw;
+    const size = JSON.stringify(values ?? null).length;
+
+    if (i > 0 && size > budget) {
+      omitted++;
+      return {
+        ...slimRepo(d),
+        values_omitted:
+          `values are ~${Math.ceil(size / 1024)} KB, over the remaining response budget — fetch this repo on its own ` +
+          `with repo:"${d.repo}", or narrow the response with value_paths.`,
+      };
+    }
+    budget -= size;
+    return { ...slimRepo(d), values };
+  });
+
+  return { deployments, omitted };
 }
 
 export function registerGetRelease(server: McpServer, store: DataStore): void {
@@ -59,7 +111,10 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
         value_paths: z
           .array(z.string().min(1))
           .optional()
-          .describe("`values` view: only return these value-path subtrees, e.g. ['server.persistentVolume','server.retentionPeriod']."),
+          .describe(
+            "`values` view: only return these value-path subtrees, e.g. ['server.persistentVolume','server.retentionPeriod']. " +
+              "Paths from the summary view's common_settings work as-is, including array forms like 'route.hostnames[]'.",
+          ),
       },
       outputSchema: {
         id: z.string(),
@@ -117,6 +172,10 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
         shown: z.number().optional(),
         offset: z.number().optional(),
         has_more: z.boolean().optional(),
+        /** values view: the repos the `repo` filter resolved to. */
+        matched_repos: z.array(z.string()).optional(),
+        /** values view: how many entries were too large to include in this response. */
+        omitted_count: z.number().optional(),
         deployments: z
           .array(
             z.object({
@@ -143,7 +202,7 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
     },
     async ({ id, view, limit, offset, top, examples, repo, value_paths }) => {
       await store.ready();
-      const index = store.getReleaseIndex();
+      const index = await store.getReleaseIndex();
       const group = index.groups.get(id);
       if (!group) {
         return fail(
@@ -188,8 +247,9 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
           },
           top_repos: group.deployments.slice(0, 10).map(slimRepo),
           next_step:
-            `Use view:"deployments" to page through all ${group.deploymentCount} repos, or view:"values" ` +
-            `(with repo and/or value_paths) to see a specific deployment's full config.`,
+            `Cheapest next step: view:"values" with repo set to one of top_repos and value_paths set to the paths you ` +
+            `care about from common_settings above (they can be pasted as-is). Use view:"deployments" only when you ` +
+            `need to page through all ${group.deploymentCount} repos.`,
         });
       }
 
@@ -201,48 +261,41 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
           offset,
           has_more: offset + page.length < group.deploymentCount,
           deployments: page.map(slimRepo),
-          next_step: 'Use view:"values" with a repo or file_url from this list to fetch its full spec.values.',
+          next_step:
+            'Use view:"values" with a repo from this list to fetch its spec.values. Add value_paths to keep the ' + "response small.",
         });
       }
 
       // view === "values": full (optionally projected) config for selected deployments.
       let selected = group.deployments;
       if (repo) {
-        const needle = repo.toLowerCase();
-        selected = selected.filter((d) => d.repo.toLowerCase() === needle || d.repo.toLowerCase().includes(needle));
+        selected = filterByRepo(selected, repo);
         if (selected.length === 0) {
-          return fail(
-            `No deployment from a repo matching "${repo}" in release "${id}". Use view:"deployments" to list the repos.`,
-          );
+          return fail(`No deployment from a repo matching "${repo}" in release "${id}". Use view:"deployments" to list the repos.`);
         }
       }
       const page = selected.slice(offset, offset + limit);
       const valuesByUrl = store.getValues(page.map((d) => d.fileUrl));
+      const { deployments, omitted } = buildValuesPage(page, valuesByUrl, value_paths, VALUES_VIEW_BUDGET);
 
-      let budget = VALUES_VIEW_BUDGET;
-      let budgetHit = false;
-      const deployments = page.map((d) => {
-        const raw = valuesByUrl.get(d.fileUrl) ?? null;
-        const values = value_paths && value_paths.length > 0 ? projectPaths(raw, value_paths) : raw;
-        if (budgetHit) {
-          return { ...slimRepo(d), values_omitted: 'response budget reached — narrow with value_paths or a higher offset' };
-        }
-        const size = JSON.stringify(values ?? null).length;
-        budget -= size;
-        if (budget < 0) {
-          budgetHit = true;
-          return { ...slimRepo(d), values_omitted: 'response budget reached — narrow with value_paths or a higher offset' };
-        }
-        return { ...slimRepo(d), values };
-      });
+      const nextStep =
+        omitted > 0
+          ? "Some values were too large for one response — re-request the omitted repos individually, or pass value_paths to fetch only the subtrees you need."
+          : value_paths && value_paths.length > 0
+            ? undefined
+            : "Pass value_paths to fetch only the config subtrees you need.";
 
       return ok({
         ...base,
         shown: page.length,
         offset,
-        has_more: budgetHit || offset + page.length < selected.length,
+        // Purely positional: budget omissions are reported per entry, since
+        // re-paging would only fetch the same oversized documents again.
+        has_more: offset + page.length < selected.length,
+        matched_repos: uniq(selected.map((d) => d.repo)).slice(0, 20),
         deployments,
-        ...(value_paths && value_paths.length > 0 ? {} : { next_step: "Pass value_paths to fetch only the config subtrees you need." }),
+        ...(omitted > 0 ? { omitted_count: omitted } : {}),
+        ...(nextStep ? { next_step: nextStep } : {}),
       });
     },
   );

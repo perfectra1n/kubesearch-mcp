@@ -74,6 +74,27 @@ export function registerPrompts(server: McpServer, opts: { cloneEnabled: boolean
       ),
   );
 
+  server.registerPrompt(
+    "kubesearch_pick_image",
+    {
+      title: "Pick a container image and tag",
+      description: "Find which container image repository and tag the community actually runs for an app.",
+      argsSchema: { app: z.string().min(1).describe("Application or image name, e.g. 'postgres' or 'home-assistant'.") },
+    },
+    ({ app }) =>
+      userPrompt(
+        `Work out which container image and tag to run for "${app}", based on what home-ops clusters actually use.\n\n` +
+          `1. Call kubesearch_search_images with query "${app}". The results are ranked by usage_count — note the ` +
+          `dominant repository, its popular tags, and the sample_repos running it.\n` +
+          `2. Call kubesearch_search_releases with query "${app}" and kubesearch_get_release (view: "summary") on the ` +
+          `top result to see how charts wire that image up (image.repository / image.tag values).\n` +
+          `3. Recommend a repository and a tag-pinning approach — a pinned semver tag, a digest, or a floating tag — ` +
+          `and say which the sample repos chose. Flag it if usage is split across several repositories, since that ` +
+          `usually means a fork or a registry mirror.`,
+        `Pick an image for ${app}`,
+      ),
+  );
+
   if (opts.cloneEnabled) {
     server.registerPrompt(
       "kubesearch_review_repo",

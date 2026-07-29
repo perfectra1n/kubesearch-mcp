@@ -16,6 +16,18 @@ export function registerRepoListFiles(server: McpServer, repos: RepoStore): void
         path: z.string().default(".").describe("Sub-path within the repo to list (default: repo root)."),
         glob: z.string().optional().describe("Optional glob filter applied to file paths, e.g. '**/*.yaml'."),
       },
+      outputSchema: {
+        handle: z.string(),
+        path: z.string(),
+        entries: z.array(
+          z.object({
+            path: z.string(),
+            type: z.enum(["file", "dir"]),
+            size: z.number().optional(),
+          }),
+        ),
+        truncated: z.boolean(),
+      },
       annotations: READ_ONLY,
     },
     async ({ handle, path, glob }) => guarded(async () => repos.list(handle, path, glob) as unknown as Record<string, unknown>),

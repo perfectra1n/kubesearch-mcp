@@ -17,12 +17,15 @@ export function registerGrepValues(server: McpServer, store: DataStore): void {
       inputSchema: {
         query: z.string().min(1).describe("Substring to grep for in values (keys or values), e.g. 'cert-manager.io'."),
         limit: z.number().int().min(1).max(200).default(30).describe("Max number of matching files to return."),
+        offset: z.number().int().min(0).default(0).describe("Skip this many matches (results are ranked by repo stars)."),
         case_sensitive: z.boolean().default(false).describe("Match case-sensitively."),
       },
       outputSchema: {
         query: z.string(),
         total_files: z.number(),
         shown: z.number(),
+        offset: z.number(),
+        has_more: z.boolean(),
         grep_url: z.string(),
         results: z.array(
           z.object({
@@ -37,14 +40,16 @@ export function registerGrepValues(server: McpServer, store: DataStore): void {
       },
       annotations: READ_ONLY,
     },
-    async ({ query, limit, case_sensitive }) => {
+    async ({ query, limit, offset, case_sensitive }) => {
       await store.ready();
-      const index = store.getReleaseIndex();
-      const result = grepValues(store.database, index, query, limit, case_sensitive);
+      const index = await store.getReleaseIndex();
+      const result = grepValues(store.database, index, query, limit, case_sensitive, offset);
       return ok({
         query,
         total_files: result.totalFiles,
         shown: result.matches.length,
+        offset,
+        has_more: offset + result.matches.length < result.totalFiles,
         grep_url: grepSearchUrl(query),
         results: result.matches.map((m) => ({
           repo: m.repo,

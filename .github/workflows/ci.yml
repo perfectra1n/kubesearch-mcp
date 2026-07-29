@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # mise pins the toolchain and defines the tasks below, so every step here
+      # is the same command a developer runs locally. mise itself is pinned so the
+      # committed lockfile stays readable — regenerate the lockfile when bumping
+      # this (see .mise/config.toml).
+      - name: Setup mise
+        uses: jdx/mise-action@v4
+        with:
+          version: 2026.7.16
+          install_args: --locked
+
+      - name: Lint (typecheck, formatting, shell)
+        run: mise run lint
+
+      - name: Test
+        run: mise run test
+
+      - name: Build
+        run: mise run build

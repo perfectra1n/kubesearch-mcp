@@ -1,6 +1,13 @@
+import { setImmediate as yieldToLoop } from "node:timers/promises";
 import type { Database } from "better-sqlite3";
 import { walkObjects } from "../util/jsonWalk.js";
-import type { ImageEntry } from "./types.js";
+import type { ImageEntry, ImageIndex, SearchEntry } from "./types.js";
+
+/**
+ * Rows processed between event-loop yields. Lower than the release index's
+ * because every row here costs a JSON.parse of a full values document.
+ */
+const YIELD_EVERY = 200;
 
 const VALUES_QUERY = `
   select url, val from ext.flux_helm_release_values
@@ -40,12 +47,18 @@ function record(agg: Map<string, ImageAgg>, repository: string, tag: string | un
  * Build a repository -> {tags, fileUrls} index by scanning every values blob in
  * the extended database. Mirrors kubesearch's image extraction but walks nested
  * objects too (so e.g. `controllers.main.containers.*.image` is captured).
+ *
+ * This is the most expensive operation in the server (a JSON.parse of the whole
+ * ~37 MB corpus), so it streams and yields to the event loop rather than
+ * blocking it for seconds.
  */
-export function buildImageIndex(db: Database): Map<string, ImageEntry> {
-  const rows = db.prepare(VALUES_QUERY).all() as Array<{ url: string; val: string | null }>;
+export async function buildImageIndex(db: Database): Promise<ImageIndex> {
+  const rows = db.prepare(VALUES_QUERY).iterate() as Iterable<{ url: string; val: string | null }>;
   const agg = new Map<string, ImageAgg>();
+  let processed = 0;
 
   for (const row of rows) {
+    if (++processed % YIELD_EVERY === 0) await yieldToLoop();
     if (!row.val) continue;
     let parsed: unknown;
     try {
@@ -68,22 +81,29 @@ export function buildImageIndex(db: Database): Map<string, ImageEntry> {
     });
   }
 
-  const out = new Map<string, ImageEntry>();
+  const byRepo = new Map<string, ImageEntry>();
   for (const [repository, entry] of agg) {
-    out.set(repository, {
+    byRepo.set(repository, {
       repository,
       tags: [...entry.tags].sort(),
       usageCount: entry.urls.size,
       fileUrls: [...entry.urls],
     });
   }
-  return out;
+
+  // Ranking is query-independent — sort once here, not on every search.
+  const searchList: Array<SearchEntry<ImageEntry>> = [...byRepo.values()].map((item) => ({
+    lower: item.repository.toLowerCase(),
+    item,
+  }));
+  searchList.sort((a, b) => b.item.usageCount - a.item.usageCount || a.item.repository.localeCompare(b.item.repository));
+
+  return { byRepo, searchList };
 }
 
 /** Search the image index by repository substring (case-insensitive). */
-export function searchImages(index: Map<string, ImageEntry>, query: string, limit: number): { total: number; entries: ImageEntry[] } {
+export function searchImages(index: ImageIndex, query: string, limit: number, offset: number): { total: number; entries: ImageEntry[] } {
   const q = query.toLowerCase();
-  const matches = [...index.values()].filter((e) => e.repository.toLowerCase().includes(q));
-  matches.sort((a, b) => b.usageCount - a.usageCount || a.repository.localeCompare(b.repository));
-  return { total: matches.length, entries: matches.slice(0, limit) };
+  const matches = index.searchList.filter((e) => e.lower.includes(q));
+  return { total: matches.length, entries: matches.slice(offset, offset + limit).map((e) => e.item) };
 }

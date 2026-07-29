@@ -47,9 +47,21 @@ export interface UrlMeta {
   key: string;
 }
 
+/**
+ * One searchable item with its lowercased key precomputed. Ranking is
+ * query-independent, so the list is sorted once at build time and every search
+ * is a single filter pass — no per-query spread, lowercasing, or sort.
+ */
+export interface SearchEntry<T> {
+  lower: string;
+  item: T;
+}
+
 export interface ReleaseIndex {
   groups: Map<string, ReleaseGroup>;
   urlMeta: Map<string, UrlMeta>;
+  /** Groups presorted by rank, keyed on the lowercased chart name. */
+  searchList: Array<SearchEntry<ReleaseGroup>>;
 }
 
 export interface ImageEntry {
@@ -57,6 +69,12 @@ export interface ImageEntry {
   tags: string[];
   usageCount: number;
   fileUrls: string[];
+}
+
+export interface ImageIndex {
+  byRepo: Map<string, ImageEntry>;
+  /** Entries presorted by usage, keyed on the lowercased repository. */
+  searchList: Array<SearchEntry<ImageEntry>>;
 }
 
 /** One frequently-set value path across a chart's deployments. */

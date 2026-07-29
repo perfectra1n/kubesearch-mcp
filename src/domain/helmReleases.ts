@@ -1,6 +1,10 @@
+import { setImmediate as yieldToLoop } from "node:timers/promises";
 import type { Database } from "better-sqlite3";
 import { mergeHelmURL, releaseKey } from "./releaseKey.js";
-import type { Deployment, ReleaseGroup, ReleaseIndex } from "./types.js";
+import type { Deployment, ReleaseGroup, ReleaseIndex, SearchEntry } from "./types.js";
+
+/** Rows processed between event-loop yields while building the index. */
+const YIELD_EVERY = 2000;
 
 /**
  * The 3-branch UNION query, mirrored from upstream
@@ -88,13 +92,21 @@ function deriveOciChart(rawUrl: string, chartName: string): string | null {
   return last;
 }
 
-/** Build the full release-key index from the metadata database. */
-export function buildReleaseIndex(db: Database): ReleaseIndex {
-  const rows = db.prepare(COLLECTOR_QUERY).all() as CollectorRow[];
+/**
+ * Build the full release-key index from the metadata database.
+ *
+ * Streams the rows and yields to the event loop periodically: better-sqlite3 is
+ * synchronous, so building this in one go would stall every other request
+ * (including health checks) for the duration.
+ */
+export async function buildReleaseIndex(db: Database): Promise<ReleaseIndex> {
+  const rows = db.prepare(COLLECTOR_QUERY).iterate() as Iterable<CollectorRow>;
   const groups = new Map<string, ReleaseGroup>();
   const urlMeta = new Map<string, import("./types.js").UrlMeta>();
+  let processed = 0;
 
   for (const row of rows) {
+    if (++processed % YIELD_EVERY === 0) await yieldToLoop();
     const rawUrl = row.helm_repo_url ?? "";
     const mergedUrl = mergeHelmURL(rawUrl);
     const key = releaseKey(mergedUrl, row.chart_name, row.release_name);
@@ -155,19 +167,30 @@ export function buildReleaseIndex(db: Database): ReleaseIndex {
     group.resolvedChart = distinctResolved.length === 1 ? distinctResolved[0]! : null;
   }
 
-  return { groups, urlMeta };
-}
+  // Ranking doesn't depend on the query, so sort once here rather than on every
+  // search. `deployments` is already stars-desc, so its head is the max.
+  const searchList: Array<SearchEntry<ReleaseGroup>> = [...groups.values()].map((group) => ({
+    lower: group.chart.toLowerCase(),
+    item: group,
+  }));
+  searchList.sort(
+    (a, b) =>
+      b.item.deploymentCount - a.item.deploymentCount ||
+      (b.item.deployments[0]?.stars ?? 0) - (a.item.deployments[0]?.stars ?? 0) ||
+      a.item.chart.localeCompare(b.item.chart),
+  );
 
-function maxStars(group: ReleaseGroup): number {
-  let max = 0;
-  for (const d of group.deployments) if (d.stars > max) max = d.stars;
-  return max;
+  return { groups, urlMeta, searchList };
 }
 
 /** Search release groups by chart-name substring (case-insensitive). */
-export function searchReleaseGroups(index: ReleaseIndex, query: string, limit: number, offset: number): { total: number; groups: ReleaseGroup[] } {
+export function searchReleaseGroups(
+  index: ReleaseIndex,
+  query: string,
+  limit: number,
+  offset: number,
+): { total: number; groups: ReleaseGroup[] } {
   const q = query.toLowerCase();
-  const matches = [...index.groups.values()].filter((g) => g.chart.toLowerCase().includes(q));
-  matches.sort((a, b) => b.deploymentCount - a.deploymentCount || maxStars(b) - maxStars(a) || a.chart.localeCompare(b.chart));
-  return { total: matches.length, groups: matches.slice(offset, offset + limit) };
+  const matches = index.searchList.filter((e) => e.lower.includes(q));
+  return { total: matches.length, groups: matches.slice(offset, offset + limit).map((e) => e.item) };
 }

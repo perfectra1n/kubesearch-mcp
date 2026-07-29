@@ -17,11 +17,14 @@ export function registerSearchImages(server: McpServer, store: DataStore): void 
       inputSchema: {
         query: z.string().min(1).describe("Image repository substring, e.g. 'cert-manager', 'ghcr.io/home-operations', 'postgres'."),
         limit: z.number().int().min(1).max(100).default(25).describe("Max number of image repositories to return."),
+        offset: z.number().int().min(0).default(0).describe("Skip this many results (ranked by usage count)."),
       },
       outputSchema: {
         query: z.string(),
         total_matches: z.number(),
         shown: z.number(),
+        offset: z.number(),
+        has_more: z.boolean(),
         image_url: z.string(),
         results: z.array(
           z.object({
@@ -36,15 +39,17 @@ export function registerSearchImages(server: McpServer, store: DataStore): void 
       },
       annotations: READ_ONLY,
     },
-    async ({ query, limit }) => {
+    async ({ query, limit, offset }) => {
       await store.ready();
-      const imageIndex = store.getImageIndex();
-      const releaseIndex = store.getReleaseIndex();
-      const { total, entries } = searchImages(imageIndex, query, limit);
+      const imageIndex = await store.getImageIndex();
+      const releaseIndex = await store.getReleaseIndex();
+      const { total, entries } = searchImages(imageIndex, query, limit, offset);
       return ok({
         query,
         total_matches: total,
         shown: entries.length,
+        offset,
+        has_more: offset + entries.length < total,
         image_url: imageSearchUrl(query),
         results: entries.map((e) => {
           const repos = uniq(e.fileUrls.map((u) => releaseIndex.urlMeta.get(u)?.repo).filter((r): r is string => !!r));

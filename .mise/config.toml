@@ -1,0 +1,120 @@
+# mise is the single source of truth for the toolchain and for the dev/release
+# lifecycle, in developer shells and in CI alike. `mise tasks` lists what's
+# available; `mise run <task>` runs one. Every CI job invokes one of these tasks,
+# so anything CI does is reproducible locally with the identical command.
+#
+# First-time setup is `mise install`, which also installs the git hooks via the
+# postinstall hook at the bottom of this file.
+
+# `.mise/mise.lock` pins a checksum per tool per platform and is enforced by
+# `mise install --locked` in CI. Two constraints come with that:
+#
+#   1. Node comes from the aqua backend rather than mise's built-in `core:node`.
+#      `--locked` cannot resolve core-backend tools from a lockfile — it fails
+#      with "node@X is not in the lockfile" even against an entry the same mise
+#      release just wrote — so a plain `node = "..."` here breaks locked installs.
+#   2. Regenerate the lockfile (`mise lock`) with the same mise release CI
+#      installs, pinned in the workflows: a lockfile can be rejected across mise
+#      versions.
+
+[tools]
+# Keep in step with package.json `engines.node` (the minimum supported runtime)
+# and the Docker base image. Renovate updates them together. This provides node,
+# npm and npx.
+"aqua:nodejs/node" = "24.18.0"
+lefthook = "2.1.10"
+# docker/healthcheck.sh is linted by the pre-commit hook.
+shellcheck = "0.11.0"
+
+[tasks.install]
+description = "Install npm dependencies from the lockfile"
+sources = ["package.json", "package-lock.json"]
+outputs = { auto = true }
+run = "npm ci"
+
+[tasks.dev]
+description = "Run the server from source (tsx), no build step"
+depends = ["install"]
+run = "npm run dev"
+
+[tasks.build]
+description = "Bundle src/ to dist/ with tsup"
+depends = ["install"]
+run = "npm run build"
+
+[tasks.typecheck]
+description = "Type-check without emitting (tsc --noEmit)"
+depends = ["install"]
+run = "npm run typecheck"
+
+[tasks.test]
+description = "Run the offline test suite (vitest)"
+depends = ["install"]
+run = "npm test"
+
+[tasks.test-watch]
+description = "Run the test suite in watch mode"
+depends = ["install"]
+run = "npm run test:watch"
+
+[tasks.fmt]
+description = "Format the repo in place with prettier"
+depends = ["install"]
+run = "npm run fmt"
+
+[tasks.fmt-check]
+description = "Verify formatting without writing (CI gate)"
+depends = ["install"]
+run = "npm run fmt:check"
+
+[tasks.lint]
+description = "Type-check, check formatting, and lint shell scripts"
+depends = ["install"]
+run = [
+  "npm run typecheck",
+  "npm run fmt:check",
+  "shellcheck docker/healthcheck.sh",
+]
+
+[tasks.smoke]
+description = "End-to-end smoke test against live upstream data (needs network)"
+depends = ["build"]
+run = "node scripts/smoke.mjs"
+
+[tasks.ci]
+description = "The full local gate: format, typecheck, test, build"
+depends = ["fmt-check", "typecheck", "test", "build"]
+
+[tasks.image]
+description = "Build the container image locally"
+run = '''
+set -eu
+docker build -t "${KUBESEARCH_IMAGE:-kubesearch-mcp}:${KUBESEARCH_IMAGE_TAG:-dev}" .
+'''
+
+[tasks.version-check]
+description = "Fail if the git tag being released doesn't match package.json (release gate)"
+run = '''
+set -eu
+TAG="${TAG:-${GITHUB_REF_NAME:-}}"
+if [ -z "$TAG" ]; then
+  echo "error: set TAG=vX.Y.Z (or run in CI where GITHUB_REF_NAME is set)" >&2
+  exit 1
+fi
+TAG_VERSION="${TAG#v}"
+PKG_VERSION="$(node -p "require('./package.json').version")"
+if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+  echo "error: tag v$TAG_VERSION does not match package.json version $PKG_VERSION" >&2
+  exit 1
+fi
+echo "tag v$TAG_VERSION matches package.json"
+'''
+
+[tasks.pack]
+description = "Build and pack the npm tarball (release artifact)"
+depends = ["build"]
+run = "npm pack"
+
+# `mise install` wires the git hooks, so a fresh clone needs no extra step.
+[hooks]
+postinstall = "lefthook install"

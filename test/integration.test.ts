@@ -15,13 +15,11 @@ function fixtureValues(database: Database.Database, urls: string[]): Map<string,
   const placeholders = urls.map(() => "?").join(",");
   const rows = database
     .prepare(
-      `select url, val from (
-         select url, val from ext.flux_helm_release_values
-         union all
-         select url, val from ext.argo_helm_application_values
-       ) where url in (${placeholders})`,
+      `select url, val from ext.flux_helm_release_values where url in (${placeholders})
+       union all
+       select url, val from ext.argo_helm_application_values where url in (${placeholders})`,
     )
-    .all(...urls) as Array<{ url: string; val: string | null }>;
+    .all(...urls, ...urls) as Array<{ url: string; val: string | null }>;
   for (const r of rows) if (r.val) out.set(r.url, JSON.parse(r.val));
   return out;
 }
@@ -30,11 +28,11 @@ let db: Database.Database;
 let cleanup: () => void;
 let index: ReleaseIndex;
 
-beforeAll(() => {
+beforeAll(async () => {
   const fx = makeFixtureDb();
   db = fx.db;
   cleanup = fx.cleanup;
-  index = buildReleaseIndex(db);
+  index = await buildReleaseIndex(db);
 });
 
 afterAll(() => cleanup());
@@ -105,12 +103,45 @@ describe("grepValues", () => {
     expect(grepValues(db, index, "CERT-MANAGER.IO", 30, true).totalFiles).toBe(0);
     expect(grepValues(db, index, "CERT-MANAGER.IO", 30, false).totalFiles).toBeGreaterThanOrEqual(1);
   });
+
+  it("ranks the whole match set by stars, not by table scan order", () => {
+    // installCRDs is in all three fixture files; the 9999-star repo's row is
+    // written last, so returning it first proves ranking precedes truncation.
+    const res = grepValues(db, index, "installCRDs", 1, false);
+    expect(res.matches).toHaveLength(1);
+    expect(res.matches[0]!.repo).toBe("bigstar/cluster");
+  });
+
+  it("reports the full match count even when the limit truncates the page", () => {
+    expect(grepValues(db, index, "installCRDs", 1, false).totalFiles).toBe(3);
+    expect(grepValues(db, index, "installCRDs", 30, false).totalFiles).toBe(3);
+  });
+
+  it("pages disjointly and in descending star order", () => {
+    const page0 = grepValues(db, index, "installCRDs", 1, false, 0);
+    const page1 = grepValues(db, index, "installCRDs", 1, false, 1);
+    const page2 = grepValues(db, index, "installCRDs", 1, false, 2);
+    const urls = [page0, page1, page2].map((p) => p.matches[0]!.fileUrl);
+    expect(new Set(urls).size).toBe(3);
+    expect(page0.matches[0]!.stars).toBe(9999);
+    expect(page1.matches[0]!.stars).toBe(2819);
+    expect(page2.matches[0]!.stars).toBe(309);
+  });
+
+  it("returns an empty page past the end without losing the total", () => {
+    const res = grepValues(db, index, "installCRDs", 10, false, 3);
+    expect(res.matches).toHaveLength(0);
+    expect(res.totalFiles).toBe(3);
+  });
 });
 
 describe("summarizeValues over the release index", () => {
   it("digests how the cert-manager group is configured", () => {
     const group = index.groups.get("ghcr.io-home-operations-charts-mirror-cert-manager")!;
-    const valuesByUrl = fixtureValues(db, group.deployments.map((d) => d.fileUrl));
+    const valuesByUrl = fixtureValues(
+      db,
+      group.deployments.map((d) => d.fileUrl),
+    );
     const summary = summarizeValues(group.deployments, valuesByUrl, { top: 25, examples: 1 });
     expect(summary.analyzedDeployments).toBe(group.deployments.length);
     const installCrds = summary.commonSettings.find((c) => c.path === "installCRDs");
@@ -121,12 +152,33 @@ describe("summarizeValues over the release index", () => {
 });
 
 describe("images", () => {
-  it("indexes nested image.repository and supports substring search", () => {
-    const imageIndex = buildImageIndex(db);
-    const { entries } = searchImages(imageIndex, "cert-manager", 25);
+  it("indexes nested image.repository and supports substring search", async () => {
+    const imageIndex = await buildImageIndex(db);
+    const { entries } = searchImages(imageIndex, "cert-manager", 25, 0);
     const entry = entries.find((e) => e.repository === "quay.io/jetstack/cert-manager-controller");
     expect(entry).toBeDefined();
     expect(entry!.tags).toContain("v1.14.0");
     expect(entry!.usageCount).toBe(1);
+  });
+
+  it("pages disjointly with offset while reporting the full total", async () => {
+    const imageIndex = await buildImageIndex(db);
+    const all = searchImages(imageIndex, "cert-manager", 25, 0);
+    expect(all.total).toBe(2);
+
+    const page0 = searchImages(imageIndex, "cert-manager", 1, 0);
+    const page1 = searchImages(imageIndex, "cert-manager", 1, 1);
+
+    expect(page0.total).toBe(2);
+    expect(page1.total).toBe(2);
+    expect(page0.entries[0]!.repository).not.toBe(page1.entries[0]!.repository);
+    expect([page0.entries[0]!.repository, page1.entries[0]!.repository].sort()).toEqual(all.entries.map((e) => e.repository).sort());
+  });
+
+  it("returns an empty page past the end", async () => {
+    const imageIndex = await buildImageIndex(db);
+    const past = searchImages(imageIndex, "cert-manager", 5, 2);
+    expect(past.entries).toEqual([]);
+    expect(past.total).toBe(2);
   });
 });

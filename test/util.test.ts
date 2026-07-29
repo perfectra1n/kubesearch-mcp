@@ -58,6 +58,19 @@ describe("projectPaths", () => {
     expect(projectPaths(obj, [])).toEqual({});
     expect(projectPaths(null, ["server"])).toEqual({});
   });
+
+  it("accepts the array notation that the summary view prints", () => {
+    // common_settings reports array paths as `hostnames[]` / `hosts[0]`; those
+    // strings have to work when pasted straight back in as value_paths.
+    const withArrays = { server: { route: { hostnames: ["a.example", "b.example"] } } };
+
+    expect(projectPaths(withArrays, ["server.route.hostnames[]"])).toEqual({
+      server: { route: { hostnames: ["a.example", "b.example"] } },
+    });
+    expect(projectPaths(withArrays, ["server.route.hostnames[0]"])).toEqual({
+      server: { route: { hostnames: ["a.example", "b.example"] } },
+    });
+  });
 });
 
 describe("makeSnippet", () => {
