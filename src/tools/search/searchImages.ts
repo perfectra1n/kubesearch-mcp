@@ -38,8 +38,8 @@ export function registerSearchImages(server: McpServer, store: DataStore): void 
     },
     async ({ query, limit }) => {
       await store.ready();
-      const imageIndex = store.getImageIndex();
-      const releaseIndex = store.getReleaseIndex();
+      const imageIndex = await store.getImageIndex();
+      const releaseIndex = await store.getReleaseIndex();
       const { total, entries } = searchImages(imageIndex, query, limit);
       return ok({
         query,

@@ -76,7 +76,7 @@ export function registerSearchReleases(server: McpServer, store: DataStore): voi
     },
     async ({ query, limit, offset }) => {
       await store.ready();
-      const index = store.getReleaseIndex();
+      const index = await store.getReleaseIndex();
       const { total, groups } = searchReleaseGroups(index, query, limit, offset);
       return ok({
         query,

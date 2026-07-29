@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadConfig, type Config } from "../src/config.js";
 import { DataStore } from "../src/data/db.js";
@@ -29,8 +30,14 @@ afterEach(() => {
   for (const fn of cleanups) fn();
   cleanups = [];
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
+
+/** Let eager index warm-up (which yields to the event loop) finish. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
 
 describe("DataStore", () => {
   it("loads from a fresh cache without touching the network", async () => {
@@ -183,6 +190,30 @@ describe("DataStore", () => {
     await store.ready();
 
     expect(store.database.pragma("temp_store", { simple: true })).toBe(2);
+  });
+
+  it("warms both indexes during load and serves later calls without re-querying", async () => {
+    const { cacheDir, cleanup } = makeFixtureCacheDir("test");
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("network should not be used");
+    }));
+    const prepareSpy = vi.spyOn(Database.prototype, "prepare");
+
+    const store = new DataStore(testConfig(cacheDir));
+    cleanups.push(() => store.close(), cleanup);
+    await store.ready();
+    await settle();
+
+    // Warm-up has already built both indexes; nothing below should hit SQLite.
+    const preparesAfterWarmup = prepareSpy.mock.calls.length;
+    const [images, sameImages] = await Promise.all([store.getImageIndex(), store.getImageIndex()]);
+    const [releases, sameReleases] = await Promise.all([store.getReleaseIndex(), store.getReleaseIndex()]);
+
+    expect(images).toBe(sameImages);
+    expect(releases).toBe(sameReleases);
+    expect(images.byRepo.size).toBeGreaterThan(0);
+    expect(releases.groups.size).toBeGreaterThan(0);
+    expect(prepareSpy.mock.calls.length).toBe(preparesAfterWarmup);
   });
 
   it("sweeps stale tmp files during load", async () => {

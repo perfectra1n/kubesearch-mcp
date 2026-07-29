@@ -143,7 +143,7 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
     },
     async ({ id, view, limit, offset, top, examples, repo, value_paths }) => {
       await store.ready();
-      const index = store.getReleaseIndex();
+      const index = await store.getReleaseIndex();
       const group = index.groups.get(id);
       if (!group) {
         return fail(

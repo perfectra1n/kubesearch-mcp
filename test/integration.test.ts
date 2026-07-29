@@ -28,11 +28,11 @@ let db: Database.Database;
 let cleanup: () => void;
 let index: ReleaseIndex;
 
-beforeAll(() => {
+beforeAll(async () => {
   const fx = makeFixtureDb();
   db = fx.db;
   cleanup = fx.cleanup;
-  index = buildReleaseIndex(db);
+  index = await buildReleaseIndex(db);
 });
 
 afterAll(() => cleanup());
@@ -149,8 +149,8 @@ describe("summarizeValues over the release index", () => {
 });
 
 describe("images", () => {
-  it("indexes nested image.repository and supports substring search", () => {
-    const imageIndex = buildImageIndex(db);
+  it("indexes nested image.repository and supports substring search", async () => {
+    const imageIndex = await buildImageIndex(db);
     const { entries } = searchImages(imageIndex, "cert-manager", 25);
     const entry = entries.find((e) => e.repository === "quay.io/jetstack/cert-manager-controller");
     expect(entry).toBeDefined();

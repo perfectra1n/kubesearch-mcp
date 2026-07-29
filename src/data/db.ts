@@ -17,9 +17,10 @@ import {
 } from "./cache.js";
 import type { PriorRelease } from "./releases.js";
 import { optimizeDatabases } from "./optimize.js";
+import { prepared } from "./stmtCache.js";
 import { buildReleaseIndex } from "../domain/helmReleases.js";
 import { buildImageIndex } from "../domain/images.js";
-import type { ImageEntry, ReleaseIndex } from "../domain/types.js";
+import type { ImageIndex, ReleaseIndex } from "../domain/types.js";
 
 export interface DataStatus {
   tag: string;
@@ -44,8 +45,11 @@ export class DataStore {
   private refreshFailures = 0;
   private initPromise: Promise<void> | null = null;
   private refreshPromise: Promise<void> | null = null;
-  private releaseIndex: ReleaseIndex | null = null;
-  private imageIndex: Map<string, ImageEntry> | null = null;
+  // The in-flight promise *is* the cache, so concurrent callers share one build.
+  private releaseIndexPromise: Promise<ReleaseIndex> | null = null;
+  private imageIndexPromise: Promise<ImageIndex> | null = null;
+  private buildsInFlight = new Set<Promise<unknown>>();
+  private closed = false;
 
   constructor(private readonly cfg: Config) {}
 
@@ -193,11 +197,40 @@ export class DataStore {
     this.db = db;
     this.tag = tag;
     this.loadedAt = Date.now();
-    this.releaseIndex = null;
-    this.imageIndex = null;
+    this.releaseIndexPromise = null;
+    this.imageIndexPromise = null;
     if (old) {
-      try { old.close(); } catch { /* ignore */ }
+      // An index build may still be streaming rows from the old handle; closing
+      // it underneath would abort that build, so wait for the ones in flight.
+      const pending = [...this.buildsInFlight];
+      const closeOld = (): void => {
+        try { old.close(); } catch { /* ignore */ }
+      };
+      if (pending.length === 0) closeOld();
+      else void Promise.allSettled(pending).then(closeOld);
     }
+    this.warmIndexes();
+  }
+
+  /**
+   * Build both indexes right after a load/swap so the first user query doesn't
+   * pay for it. Errors are non-fatal — the next getter call retries.
+   */
+  private warmIndexes(): void {
+    const report = (what: string) => (err: unknown) => {
+      if (!this.closed) log.warn(`${what} index build failed: ${(err as Error).message}`);
+    };
+    void this.getReleaseIndex().catch(report("release"));
+    void this.getImageIndex().catch(report("image"));
+  }
+
+  /** Memoize a build keyed on the connection it reads from. */
+  private startBuild<T>(build: (db: Database.Database) => Promise<T>, clear: () => void): Promise<T> {
+    const promise = build(this.require());
+    this.buildsInFlight.add(promise);
+    void promise.catch(() => {}).finally(() => this.buildsInFlight.delete(promise));
+    void promise.catch(clear);
+    return promise;
   }
 
   private require(): Database.Database {
@@ -205,14 +238,18 @@ export class DataStore {
     return this.db;
   }
 
-  getReleaseIndex(): ReleaseIndex {
-    if (!this.releaseIndex) this.releaseIndex = buildReleaseIndex(this.require());
-    return this.releaseIndex;
+  getReleaseIndex(): Promise<ReleaseIndex> {
+    if (!this.releaseIndexPromise) {
+      this.releaseIndexPromise = this.startBuild(buildReleaseIndex, () => { this.releaseIndexPromise = null; });
+    }
+    return this.releaseIndexPromise;
   }
 
-  getImageIndex(): Map<string, ImageEntry> {
-    if (!this.imageIndex) this.imageIndex = buildImageIndex(this.require());
-    return this.imageIndex;
+  getImageIndex(): Promise<ImageIndex> {
+    if (!this.imageIndexPromise) {
+      this.imageIndexPromise = this.startBuild(buildImageIndex, () => { this.imageIndexPromise = null; });
+    }
+    return this.imageIndexPromise;
   }
 
   get database(): Database.Database {
@@ -225,9 +262,9 @@ export class DataStore {
 
   /** Look up an indexed repo (e.g. "onedr0p/home-ops") to resolve its clone URL + branch. */
   getRepoByName(repoName: string): { url: string; branch: string | null } | null {
-    const row = this.require()
-      .prepare("select url, branch from repo where repo_name = ?")
-      .get(repoName) as { url: string | null; branch: string | null } | undefined;
+    const row = prepared(this.require(), "select url, branch from repo where repo_name = ?").get(repoName) as
+      | { url: string | null; branch: string | null }
+      | undefined;
     if (!row || !row.url) return null;
     return { url: row.url, branch: row.branch };
   }
@@ -239,13 +276,12 @@ export class DataStore {
     const placeholders = urls.map(() => "?").join(",");
     // The IN-filter lives in each arm (not wrapped around the UNION) so SQLite
     // is guaranteed to use the idx_*_url indexes instead of scanning both tables.
-    const rows = this.require()
-      .prepare(
-        `select url, val from ext.flux_helm_release_values where url in (${placeholders})
-         union all
-         select url, val from ext.argo_helm_application_values where url in (${placeholders})`,
-      )
-      .all(...urls, ...urls) as Array<{ url: string; val: string | null }>;
+    const rows = prepared(
+      this.require(),
+      `select url, val from ext.flux_helm_release_values where url in (${placeholders})
+       union all
+       select url, val from ext.argo_helm_application_values where url in (${placeholders})`,
+    ).all(...urls, ...urls) as Array<{ url: string; val: string | null }>;
     for (const row of rows) {
       if (!row.val) continue;
       try { out.set(row.url, JSON.parse(row.val)); } catch { /* skip malformed */ }
@@ -255,7 +291,7 @@ export class DataStore {
 
   status(): DataStatus {
     const db = this.require();
-    const count = (sql: string): number => (db.prepare(sql).get() as { c: number }).c;
+    const count = (sql: string): number => (prepared(db, sql).get() as { c: number }).c;
     return {
       tag: this.currentTag,
       cacheDir: this.cfg.cacheDir,
@@ -269,6 +305,9 @@ export class DataStore {
   }
 
   close(): void {
+    this.closed = true;
+    this.releaseIndexPromise = null;
+    this.imageIndexPromise = null;
     if (this.db) {
       try { this.db.close(); } catch { /* ignore */ }
       this.db = null;

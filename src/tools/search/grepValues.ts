@@ -42,7 +42,7 @@ export function registerGrepValues(server: McpServer, store: DataStore): void {
     },
     async ({ query, limit, offset, case_sensitive }) => {
       await store.ready();
-      const index = store.getReleaseIndex();
+      const index = await store.getReleaseIndex();
       const result = grepValues(store.database, index, query, limit, case_sensitive, offset);
       return ok({
         query,
