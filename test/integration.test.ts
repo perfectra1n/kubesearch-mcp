@@ -15,13 +15,11 @@ function fixtureValues(database: Database.Database, urls: string[]): Map<string,
   const placeholders = urls.map(() => "?").join(",");
   const rows = database
     .prepare(
-      `select url, val from (
-         select url, val from ext.flux_helm_release_values
-         union all
-         select url, val from ext.argo_helm_application_values
-       ) where url in (${placeholders})`,
+      `select url, val from ext.flux_helm_release_values where url in (${placeholders})
+       union all
+       select url, val from ext.argo_helm_application_values where url in (${placeholders})`,
     )
-    .all(...urls) as Array<{ url: string; val: string | null }>;
+    .all(...urls, ...urls) as Array<{ url: string; val: string | null }>;
   for (const r of rows) if (r.val) out.set(r.url, JSON.parse(r.val));
   return out;
 }

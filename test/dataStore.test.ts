@@ -141,6 +141,50 @@ describe("DataStore", () => {
     expect(meta.etag).toBe('W/"abc"');
   });
 
+  it("creates url lookup indexes on the extended database during load", async () => {
+    const { cacheDir, cleanup } = makeFixtureCacheDir("test");
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("network should not be used");
+    }));
+    const store = new DataStore(testConfig(cacheDir));
+    cleanups.push(() => store.close(), cleanup);
+    await store.ready();
+
+    const names = (
+      store.database.prepare("select name from ext.sqlite_master where type='index'").all() as Array<{ name: string }>
+    ).map((row) => row.name);
+    expect(names).toContain("idx_fhrv_url");
+    expect(names).toContain("idx_ahav_url");
+  });
+
+  it("getValues round-trips parsed values for known urls", async () => {
+    const { cacheDir, cleanup } = makeFixtureCacheDir("test");
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("network should not be used");
+    }));
+    const store = new DataStore(testConfig(cacheDir));
+    cleanups.push(() => store.close(), cleanup);
+    await store.ready();
+
+    const fluxUrl = "https://github.com/onedr0p/home-ops/blob/main/k8s/cert-manager/helmrelease.yaml";
+    const carpenikeUrl = "https://github.com/carpenike/k8s-gitops/blob/main/k8s/cert-manager/hr.yaml";
+    const values = store.getValues([fluxUrl, carpenikeUrl]);
+    expect(values.size).toBe(2);
+    expect((values.get(carpenikeUrl) as { replicaCount: number }).replicaCount).toBe(1);
+  });
+
+  it("applies performance pragmas to the connection", async () => {
+    const { cacheDir, cleanup } = makeFixtureCacheDir("test");
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("network should not be used");
+    }));
+    const store = new DataStore(testConfig(cacheDir));
+    cleanups.push(() => store.close(), cleanup);
+    await store.ready();
+
+    expect(store.database.pragma("temp_store", { simple: true })).toBe(2);
+  });
+
   it("sweeps stale tmp files during load", async () => {
     const { cacheDir, cleanup } = makeFixtureCacheDir("test");
     const stale = path.join(cacheDir, "repos-old.db.tmp-999");

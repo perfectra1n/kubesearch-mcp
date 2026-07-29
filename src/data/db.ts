@@ -16,6 +16,7 @@ import {
   type DownloadOptions,
 } from "./cache.js";
 import type { PriorRelease } from "./releases.js";
+import { optimizeDatabases } from "./optimize.js";
 import { buildReleaseIndex } from "../domain/helmReleases.js";
 import { buildImageIndex } from "../domain/images.js";
 import type { ImageEntry, ReleaseIndex } from "../domain/types.js";
@@ -172,10 +173,23 @@ export class DataStore {
   }
 
   private open(tag: string): void {
+    optimizeDatabases(this.cfg.cacheDir, tag);
     const old = this.db;
     const db = new Database(reposDbPath(this.cfg.cacheDir, tag), { readonly: true, fileMustExist: true });
     const extPath = reposExtendedDbPath(this.cfg.cacheDir, tag).replaceAll("'", "''");
     db.exec(`ATTACH DATABASE '${extPath}' AS ext`);
+    try {
+      // Read-heavy workload over a ~37 MB attached blob table: bigger page
+      // cache, memory temp storage, and mmap keep repeated scans off the disk.
+      db.pragma("cache_size = -32000");
+      db.pragma("ext.cache_size = -32000");
+      db.pragma("temp_store = MEMORY");
+      db.pragma("mmap_size = 268435456");
+      db.pragma("ext.mmap_size = 268435456");
+      db.pragma("query_only = ON");
+    } catch (err) {
+      log.warn(`could not apply pragmas: ${(err as Error).message}`);
+    }
     this.db = db;
     this.tag = tag;
     this.loadedAt = Date.now();
@@ -223,15 +237,15 @@ export class DataStore {
     const out = new Map<string, unknown>();
     if (urls.length === 0) return out;
     const placeholders = urls.map(() => "?").join(",");
+    // The IN-filter lives in each arm (not wrapped around the UNION) so SQLite
+    // is guaranteed to use the idx_*_url indexes instead of scanning both tables.
     const rows = this.require()
       .prepare(
-        `select url, val from (
-           select url, val from ext.flux_helm_release_values
-           union all
-           select url, val from ext.argo_helm_application_values
-         ) where url in (${placeholders})`,
+        `select url, val from ext.flux_helm_release_values where url in (${placeholders})
+         union all
+         select url, val from ext.argo_helm_application_values where url in (${placeholders})`,
       )
-      .all(...urls) as Array<{ url: string; val: string | null }>;
+      .all(...urls, ...urls) as Array<{ url: string; val: string | null }>;
     for (const row of rows) {
       if (!row.val) continue;
       try { out.set(row.url, JSON.parse(row.val)); } catch { /* skip malformed */ }
