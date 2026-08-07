@@ -1,0 +1,62 @@
+name: Release Please
+
+# release-please keeps a standing "chore(release): X.Y.Z" PR that bumps
+# package.json + package-lock.json and writes CHANGELOG.md from the conventional
+# commits landed since the last tag. Merging that PR is the release: this
+# workflow runs again on the merge, tags it, and cuts the GitHub Release.
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the tag and the release
+      pull-requests: write # open and update the release PR
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # GitHub deliberately does not trigger workflows from events created with the
+  # default GITHUB_TOKEN, so the tag release-please just pushed will never fire
+  # an `on: push: tags` workflow. The publish path is therefore chained here
+  # explicitly. The alternative is a GitHub App or PAT whose pushes do trigger
+  # workflows; this repo trades that setup (and the secret rotation) for two
+  # `uses:` lines.
+  release:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: write # attach the packed tarball to the release
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit # NPM_TOKEN
+
+  docker:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}

@@ -1,15 +1,36 @@
 name: Release
 
+# Publishes an already-tagged release: packs the npm tarball, attaches it to the
+# GitHub Release, and pushes to npm.
+#
+# There is deliberately no `on: push: tags` trigger. release-please creates tags
+# with the default GITHUB_TOKEN, and GitHub does not fire workflows from
+# GITHUB_TOKEN-authored events — a tag trigger here would look correct and
+# silently never run. release-please.yml calls this workflow instead; use the
+# workflow_dispatch below to replay a release by hand.
+
 on:
-  push:
-    tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        description: Tag to publish, e.g. v1.2.0
+        required: true
+        type: string
+    secrets:
+      NPM_TOKEN:
+        required: false
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to publish, e.g. v1.2.0
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag }}
   cancel-in-progress: false
 
 jobs:
@@ -18,6 +39,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Build the tagged tree, not whatever master has drifted to since.
+          ref: ${{ inputs.tag }}
 
       - name: Setup mise
         uses: jdx/mise-action@v4
@@ -32,9 +56,12 @@ jobs:
       - name: Test
         run: mise run test
 
+      # Near-tautological now that release-please bumps package.json in the same
+      # commit it tags, but it still catches a hand-cut tag.
       - name: Check tag matches package.json version
-        if: startsWith(github.ref, 'refs/tags/v')
         run: mise run version-check
+        env:
+          TAG: ${{ inputs.tag }}
 
       - name: Build and pack tarball
         run: mise run pack
@@ -47,28 +74,33 @@ jobs:
 
   github-release:
     needs: verify
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download package artifact
         uses: actions/download-artifact@v4
         with:
           name: package
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: "*.tgz"
-          prerelease: ${{ contains(github.ref_name, '-') }}
+      # release-please already created the release and wrote its notes from the
+      # changelog, so this only attaches the tarball. Generating notes here would
+      # overwrite them.
+      - name: Attach tarball to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: gh release upload "$TAG" ./*.tgz --clobber
 
   npm-publish:
     needs: verify
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
 
       - name: Setup mise
         uses: jdx/mise-action@v4
@@ -85,6 +117,7 @@ jobs:
           fi
           # Reference the env var rather than the value, so the token is never
           # written to disk. prepublishOnly builds before publishing.
+          # shellcheck disable=SC2016 # npm expands ${NODE_AUTH_TOKEN} itself
           echo '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > .npmrc
           npm ci
           npm publish --access public
