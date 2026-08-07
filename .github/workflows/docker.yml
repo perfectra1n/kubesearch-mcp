@@ -1,16 +1,35 @@
 name: Build Docker image
 
+# Branch and PR pushes build the rolling `latest`/`sha` images. Versioned images
+# are cut by release-please.yml, which calls this workflow with the tag it just
+# created — a `tags: ["v*"]` trigger would not fire for it, because GitHub does
+# not run workflows on GITHUB_TOKEN-authored events.
 on:
   push:
     branches: [master, main]
-    tags: ["v*"]
     paths-ignore: ["**.md", "LICENSE"]
   pull_request:
     paths-ignore: ["**.md", "LICENSE"]
+  workflow_call:
+    inputs:
+      tag:
+        description: Tag to publish as a versioned image, e.g. v1.2.0
+        required: false
+        type: string
+        default: ""
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to publish as a versioned image, e.g. v1.2.0
+        required: false
+        type: string
+        default: ""
 
+# Merging the release PR pushes to master, which starts a plain branch build at
+# the same time release-please calls this workflow for the tag. Keying the group
+# on the tag as well keeps those two runs from cancelling each other.
 concurrency:
-  group: docker-${{ github.ref }}
+  group: docker-${{ github.ref }}-${{ inputs.tag }}
   cancel-in-progress: true
 
 env:
@@ -31,6 +50,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Empty on branch/PR builds, where checkout falls back to the
+          # triggering ref; set on the release path so the image is built from
+          # the tagged tree.
+          ref: ${{ inputs.tag }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -52,11 +76,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # The semver patterns read `inputs.tag` rather than the git ref: on the
+          # release path this workflow is called from a branch push, so the ref
+          # is refs/heads/master and bare `type=semver` would extract nothing.
+          # `enable=` switches them off entirely for branch/PR builds.
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
             type=sha,format=short
             type=raw,value=latest,enable={{is_default_branch}}
 

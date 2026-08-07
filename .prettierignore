@@ -5,3 +5,8 @@ coverage/
 # Generated / machine-owned files.
 package-lock.json
 .mise/mise.lock
+# Both are rewritten by release-please, whose formatting does not match this
+# repo's prettier config — without these, `mise run lint` fails on every
+# release PR.
+CHANGELOG.md
+.release-please-manifest.json

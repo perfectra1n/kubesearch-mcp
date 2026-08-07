@@ -1,6 +1,6 @@
 {
   "name": "kubesearch-mcp",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "description": "MCP server for searching kubesearch.dev — Flux HelmReleases, container images, and values grep across public home-ops Kubernetes repos.",
   "type": "module",
   "bin": {
