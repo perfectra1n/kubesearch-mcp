@@ -37,7 +37,8 @@ a page are reported individually via `values_omitted` and `omitted_count`.
 | `repo_list_files` | List files in a clone (optional sub-path + glob).                                                                    |
 | `repo_read_file`  | Read a text file from a clone (binary refused, large files truncated).                                               |
 | `repo_grep`       | Substring-search a clone's text files; returns `path:line` matches. Takes `limit` and `case_sensitive`.              |
-| `repo_cleanup`    | Delete a clone early (clones also auto-expire).                                                                      |
+| `repo_grep_all`   | Substring-search the **always-warm pool** of top repos in one call, no clone step (see below).                       |
+| `repo_cleanup`    | Delete a clone early (clones also auto-expire; pool members are refused).                                            |
 
 Clones are **sandboxed**: shallow (`--depth 1`, blob-size filtered), run with `git` via
 `execFile` (no shell) and a scrubbed environment, size/TTL/concurrency-capped, confined to
@@ -56,6 +57,24 @@ snapshot and do **not** pull, so an in-progress review stays stable; re-run `rep
 Concurrent `repo_clone` calls for the same repo share a single `git` invocation, at most
 `KUBESEARCH_CLONE_MAX_CONCURRENT` git subprocesses run at once, and clone directories
 stranded by an ungraceful restart are reaped at startup.
+
+**Always-warm pool (`repo_grep_all`).** `kubesearch_grep_values` only sees Helm `spec.values`
+— that is all the upstream dataset contains. To grep across _every_ resource kind
+(Kustomizations, HTTPRoutes, ExternalSecrets, Talos configs, …) the server keeps the
+`KUBESEARCH_POOL_SIZE` (default 15) most-starred indexed repos permanently cloned and
+`repo_grep_all` searches them in one call. Ranking by raw stars alone would fill the pool with
+CLI tools and Argo-only repos that have nothing greppable, so only repos with at least
+`KUBESEARCH_POOL_MIN_RELEASES` (default 20) indexed HelmReleases are considered; set
+`KUBESEARCH_POOL_REPOS=onedr0p/home-ops,bjw-s-labs/home-ops,…` to pick the membership
+yourself. Pool clones live under `<cloneDir>/pool/<owner>__<repo>`, use the indexed repo name
+as their `handle` (so `repo_read_file` can follow a hit directly, and `repo_clone` of a pool
+member reuses it), never expire, don't count toward `KUBESEARCH_CLONE_MAX_REPOS`, and survive
+shutdown so the next start adopts them with a shallow `git fetch` instead of re-cloning
+(~4 MB per repo on disk). Membership is recomputed whenever a new dataset release lands and
+the copies are refreshed on the `KUBESEARCH_REFRESH_HOURS` cadence. Warm-up runs in the
+background and never blocks startup; while it's in progress `repo_grep_all` reports
+`pool.syncing: true` and searches whatever is ready. `KUBESEARCH_POOL_SIZE=0` disables the
+pool and hides the tool.
 
 ### Prompts (workflow shortcuts)
 
@@ -222,6 +241,9 @@ All configuration is via environment variables:
 | `KUBESEARCH_CLONE_MAX_CONCURRENT`     | `2`                                           | Max `git` subprocesses running at once.                                                                                                                                  |
 | `KUBESEARCH_CLONE_MAX_MB`             | `200`                                         | Reject/clean a clone whose tree exceeds this size.                                                                                                                       |
 | `KUBESEARCH_CLONE_TIMEOUT_SECONDS`    | `120`                                         | Hard timeout for the `git clone` subprocess.                                                                                                                             |
+| `KUBESEARCH_POOL_SIZE`                | `15`                                          | How many top repos to keep permanently cloned for `repo_grep_all`. `0` disables the pool and hides the tool.                                                             |
+| `KUBESEARCH_POOL_MIN_RELEASES`        | `20`                                          | Only repos with at least this many indexed HelmReleases are eligible for the star ranking.                                                                               |
+| `KUBESEARCH_POOL_REPOS`               | _(unset)_                                     | Comma-separated indexed repo names that replace the star ranking entirely (e.g. `onedr0p/home-ops,bjw-s-labs/home-ops`).                                                 |
 
 ## Development
 
