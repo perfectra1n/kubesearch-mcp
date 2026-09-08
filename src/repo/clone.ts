@@ -9,7 +9,7 @@ import { log } from "../util/log.js";
 import { Semaphore } from "../util/semaphore.js";
 import { validateCloneUrl } from "./urlGuard.js";
 import { curatedTree, globToRegExp, resolveInside, walkFiles } from "./fsSafe.js";
-import type { CloneRecord, CloneResult, RepoFileContent, RepoFileListing, RepoGrepResult } from "./types.js";
+import type { CloneRecord, CloneResult, PinSpec, RepoFileContent, RepoFileListing, RepoGrepResult } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -164,11 +164,92 @@ export class RepoStore {
       branch: record.branch,
       file_count: files.length,
       size_mb: Number((record.sizeBytes / 1024 / 1024).toFixed(2)),
-      expires_in_minutes: Math.round(this.cfg.ttlMs / 60000),
+      expires_in_minutes: record.pinned ? 0 : Math.round(this.cfg.ttlMs / 60000),
       reused: flags.reused,
       updated: flags.updated,
+      pinned: record.pinned === true,
       tree: curatedTree(files),
     };
+  }
+
+  // --- pool (pinned) clones ------------------------------------------------
+
+  /**
+   * Materialize an always-warm clone at a caller-chosen directory and register
+   * it under a stable handle. An existing directory (from a previous run) is
+   * refreshed with a fetch rather than re-cloned; a fetch failure keeps the
+   * stale copy rather than losing the member. Re-pinning an already-pinned
+   * handle refreshes it in place.
+   */
+  async pin(spec: PinSpec): Promise<CloneRecord> {
+    const { url } = validateCloneUrl(spec.url, this.cfg);
+    const key = `${url}\n${spec.branch ?? ""}`;
+    let exists = false;
+    try {
+      exists = (await fsp.stat(spec.dir)).isDirectory();
+    } catch {
+      /* not there yet */
+    }
+
+    if (exists) {
+      try {
+        await this.gitLimit.run(() => this.gitUpdate(spec.dir, spec.branch ?? "HEAD"));
+      } catch (err) {
+        log.warn(`pool refresh of ${url} failed, keeping existing copy: ${cleanGitError((err as Error).message)}`);
+      }
+    } else {
+      await fsp.mkdir(path.dirname(spec.dir), { recursive: true });
+      try {
+        await this.gitLimit.run(() => this.gitClone(url, spec.dir, spec.branch));
+      } catch (err) {
+        await rmDir(spec.dir);
+        throw new RepoError(`git clone failed: ${cleanGitError((err as Error).message)}`);
+      }
+    }
+
+    const { files, size } = await walkFiles(spec.dir);
+    if (size > this.cfg.maxBytes) {
+      await rmDir(spec.dir);
+      this.forget(spec.handle);
+      throw new RepoError(
+        `Cloned tree is ${(size / 1024 / 1024).toFixed(1)} MB, exceeding the ${(this.cfg.maxBytes / 1024 / 1024).toFixed(0)} MB limit.`,
+      );
+    }
+
+    const now = Date.now();
+    const prior = this.records.get(spec.handle);
+    const record: CloneRecord = {
+      handle: spec.handle,
+      key,
+      dir: spec.dir,
+      url,
+      source: spec.source,
+      branch: await this.currentBranch(spec.dir, spec.branch),
+      createdAt: prior?.createdAt ?? now,
+      lastUsed: now,
+      sizeBytes: size,
+      fileCount: files.length,
+      pinned: true,
+      stars: spec.stars,
+    };
+    this.records.set(spec.handle, record);
+    this.byKey.set(key, spec.handle);
+    log(`pinned ${url} -> ${spec.handle} (${files.length} files, ${(size / 1024 / 1024).toFixed(1)} MB${exists ? ", adopted" : ""})`);
+    return record;
+  }
+
+  /** Drop a pinned clone and delete its working copy. No-op for unknown handles. */
+  async unpin(handle: string): Promise<void> {
+    const record = this.records.get(handle);
+    if (!record?.pinned) return;
+    this.forget(handle);
+    await rmDir(record.dir);
+    log(`unpinned ${handle}`);
+  }
+
+  /** Pinned records in pin order. */
+  pinned(): CloneRecord[] {
+    return [...this.records.values()].filter((r) => r.pinned === true);
   }
 
   private gitEnv(): NodeJS.ProcessEnv {
@@ -350,12 +431,20 @@ export class RepoStore {
   async cleanup(handle: string): Promise<boolean> {
     const record = this.records.get(handle);
     if (!record) return false;
-    this.clearTimer(handle);
-    this.records.delete(handle);
-    if (this.byKey.get(record.key) === handle) this.byKey.delete(record.key);
+    if (record.pinned) throw new RepoError(`"${handle}" is a pinned pool clone and cannot be removed.`);
+    this.forget(handle);
     await rmDir(record.dir);
     log(`cleaned up clone ${handle}`);
     return true;
+  }
+
+  /** Remove a record from the in-memory maps (no disk I/O). */
+  private forget(handle: string): void {
+    const record = this.records.get(handle);
+    if (!record) return;
+    this.clearTimer(handle);
+    this.records.delete(handle);
+    if (this.byKey.get(record.key) === handle) this.byKey.delete(record.key);
   }
 
   /**
@@ -389,11 +478,15 @@ export class RepoStore {
     return this.sweptOnce;
   }
 
+  /**
+   * Remove every ephemeral clone. Pinned pool clones stay on disk so the next
+   * start can adopt them with a fetch instead of re-cloning.
+   */
   async cleanupAll(): Promise<void> {
-    const handles = [...this.records.keys()];
-    await Promise.all(handles.map((h) => this.cleanup(h)));
-    // Best-effort removal of the whole clones dir (stray temp dirs).
-    await rmDir(this.cfg.dir);
+    const ephemeral = [...this.records.values()].filter((r) => !r.pinned).map((r) => r.handle);
+    await Promise.all(ephemeral.map((h) => this.cleanup(h)));
+    // With no pool to preserve, remove the whole clones dir (stray temp dirs).
+    if (this.pinned().length === 0) await rmDir(this.cfg.dir);
   }
 
   // --- internals ---------------------------------------------------------
@@ -413,16 +506,20 @@ export class RepoStore {
     return resolveInside(record.dir, rel);
   }
 
+  /** LRU-evict ephemeral clones; pinned pool clones neither count nor get evicted. */
   private evictToCapacity(): void {
-    while (this.records.size >= this.cfg.maxRepos) {
+    for (;;) {
+      const ephemeral = [...this.records.values()].filter((r) => !r.pinned);
+      if (ephemeral.length < this.cfg.maxRepos) break;
       let oldest: CloneRecord | undefined;
-      for (const r of this.records.values()) if (!oldest || r.lastUsed < oldest.lastUsed) oldest = r;
+      for (const r of ephemeral) if (!oldest || r.lastUsed < oldest.lastUsed) oldest = r;
       if (!oldest) break;
       void this.cleanup(oldest.handle);
     }
   }
 
   private scheduleExpiry(record: CloneRecord): void {
+    if (record.pinned) return;
     this.clearTimer(record.handle);
     const timer = setTimeout(() => void this.cleanup(record.handle), this.cfg.ttlMs);
     timer.unref?.();

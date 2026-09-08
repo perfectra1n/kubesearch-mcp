@@ -12,6 +12,22 @@ export interface CloneRecord {
   lastUsed: number;
   sizeBytes: number;
   fileCount: number;
+  /** Pool member: exempt from the idle TTL, the LRU cap, `repo_cleanup`, and shutdown cleanup. */
+  pinned?: boolean;
+  /** Repo stars from the index (pool members only; drives grep_all ordering). */
+  stars?: number;
+}
+
+/** What the pool needs to say to register an always-warm clone. */
+export interface PinSpec {
+  /** Stable handle; for pool members this is the indexed repo name. */
+  handle: string;
+  source: string;
+  url: string;
+  /** Indexed branch, or null to take the remote default. */
+  branch: string | null;
+  dir: string;
+  stars: number;
 }
 
 export interface CloneResult {
@@ -24,6 +40,8 @@ export interface CloneResult {
   /** True when this reused an existing clone that was refreshed (git fetch) rather than freshly cloned. */
   reused: boolean;
   updated: boolean;
+  /** True for an always-warm pool clone (never expires; expires_in_minutes is 0). */
+  pinned: boolean;
   /** Curated listing biased toward Kubernetes/Flux/Helm files. */
   tree: string[];
 }

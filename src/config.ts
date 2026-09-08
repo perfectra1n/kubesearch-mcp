@@ -63,6 +63,17 @@ export interface CloneConfig {
   maxBytes: number;
   /** Hard timeout for the `git clone` subprocess. */
   timeoutMs: number;
+  /** Always-warm pool of top repos for cross-repo grep. */
+  pool: PoolConfig;
+}
+
+export interface PoolConfig {
+  /** How many repos to keep warm; 0 disables the pool (and `repo_grep_all`). */
+  size: number;
+  /** Rank by stars, but only among repos with at least this many indexed HelmReleases. */
+  minReleases: number;
+  /** Explicit membership (indexed repo names). When non-empty it replaces the star ranking entirely. */
+  repos: string[];
 }
 
 function defaultCacheDir(): string {
@@ -126,6 +137,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     maxConcurrent: parseIntEnv(env.KUBESEARCH_CLONE_MAX_CONCURRENT, 2),
     maxBytes: parseIntEnv(env.KUBESEARCH_CLONE_MAX_MB, 200) * 1024 * 1024,
     timeoutMs: parseIntEnv(env.KUBESEARCH_CLONE_TIMEOUT_SECONDS, 120) * 1000,
+    pool: {
+      size: Math.max(0, parseIntEnv(env.KUBESEARCH_POOL_SIZE, 15)),
+      minReleases: Math.max(0, parseIntEnv(env.KUBESEARCH_POOL_MIN_RELEASES, 20)),
+      repos: parseTokensEnv(env.KUBESEARCH_POOL_REPOS),
+    },
   };
   return {
     transport: parseTransport(env.MCP_TRANSPORT),
