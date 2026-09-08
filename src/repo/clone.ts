@@ -9,7 +9,18 @@ import { log } from "../util/log.js";
 import { Semaphore } from "../util/semaphore.js";
 import { validateCloneUrl } from "./urlGuard.js";
 import { curatedTree, globToRegExp, resolveInside, walkFiles } from "./fsSafe.js";
-import type { CloneRecord, CloneResult, PinSpec, RepoFileContent, RepoFileListing, RepoGrepResult } from "./types.js";
+import type {
+  CloneRecord,
+  CloneResult,
+  PinSpec,
+  RepoFileContent,
+  RepoFileListing,
+  RepoGrepAllOptions,
+  RepoGrepAllRepo,
+  RepoGrepAllResult,
+  RepoGrepMatch,
+  RepoGrepResult,
+} from "./types.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -385,45 +396,50 @@ export class RepoStore {
   async grep(handle: string, query: string, glob?: string, maxResults = 100, caseSensitive = false): Promise<RepoGrepResult> {
     const record = this.touch(handle);
     if (query === "") throw new RepoError("Empty grep query.");
-    const matcher = glob ? globToRegExp(glob) : null;
-    const needle = caseSensitive ? query : query.toLowerCase();
-    const { files } = await walkFiles(record.dir);
-    const matches: RepoGrepResult["matches"] = [];
-    let total = 0;
-    let truncated = false;
+    const { matches, total } = await grepTree(record.dir, query, glob, maxResults, caseSensitive);
+    return { handle, query, total_matches: total, matches, truncated: total > matches.length };
+  }
 
-    for (const rel of files) {
-      if (matcher && !matcher.test(rel)) continue;
-      const abs = path.join(record.dir, rel);
-      let stat: fs.Stats;
-      try {
-        stat = await fsp.stat(abs);
-      } catch {
-        continue;
-      }
-      if (stat.size > GREP_FILE_MAX_BYTES) continue;
-      let text: string;
-      try {
-        text = await fsp.readFile(abs, "utf-8");
-      } catch {
-        continue;
-      }
-      if (text.includes("\u0000")) continue; // binary
-      const lines = text.split("\n");
-      for (let i = 0; i < lines.length; i++) {
-        const haystack = caseSensitive ? lines[i]! : lines[i]!.toLowerCase();
-        if (haystack.includes(needle)) {
-          total++;
-          if (matches.length < maxResults) {
-            const line = lines[i]!;
-            matches.push({ path: rel, line: i + 1, text: line.length > 240 ? line.slice(0, 240) + "…" : line.trim() });
-          } else {
-            truncated = true;
-          }
-        }
-      }
+  /**
+   * Grep every pinned pool clone at once. Repos are searched concurrently and
+   * reported most-starred first; per-repo and overall line caps trim what is
+   * returned while `match_count`/`total_matches` stay complete.
+   */
+  async grepAll(query: string, opts: RepoGrepAllOptions = {}): Promise<RepoGrepAllResult> {
+    if (query === "") throw new RepoError("Empty grep query.");
+    const maxPerRepo = opts.maxPerRepo ?? 20;
+    const limit = opts.limit ?? 200;
+    const members = this.pinned().sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0) || a.handle.localeCompare(b.handle));
+
+    const perRepo = await Promise.all(
+      members.map(async (record) => {
+        const { matches, total } = await grepTree(record.dir, query, opts.glob, maxPerRepo, opts.caseSensitive ?? false);
+        return { record, matches, total };
+      }),
+    );
+
+    let budget = limit;
+    let totalMatches = 0;
+    let truncated = false;
+    const repos: RepoGrepAllRepo[] = [];
+    for (const { record, matches, total } of perRepo) {
+      totalMatches += total;
+      if (total === 0) continue;
+      const kept = matches.slice(0, Math.max(0, budget));
+      budget -= kept.length;
+      const repoTruncated = total > kept.length;
+      truncated ||= repoTruncated;
+      repos.push({
+        handle: record.handle,
+        repo: record.source,
+        stars: record.stars ?? 0,
+        branch: record.branch,
+        match_count: total,
+        matches: kept,
+        truncated: repoTruncated,
+      });
     }
-    return { handle, query, total_matches: total, matches, truncated };
+    return { query, repos_searched: members.length, total_matches: totalMatches, repos, truncated };
   }
 
   // --- lifecycle ---------------------------------------------------------
@@ -536,6 +552,54 @@ export class RepoStore {
 }
 
 // --- helpers -------------------------------------------------------------
+
+/**
+ * Line-grep the text files under a working copy. `total` counts every hit;
+ * `matches` holds at most `maxResults` of them in walk order.
+ */
+async function grepTree(
+  root: string,
+  query: string,
+  glob: string | undefined,
+  maxResults: number,
+  caseSensitive: boolean,
+): Promise<{ matches: RepoGrepMatch[]; total: number }> {
+  const matcher = glob ? globToRegExp(glob) : null;
+  const needle = caseSensitive ? query : query.toLowerCase();
+  const { files } = await walkFiles(root);
+  const matches: RepoGrepMatch[] = [];
+  let total = 0;
+
+  for (const rel of files) {
+    if (matcher && !matcher.test(rel)) continue;
+    const abs = path.join(root, rel);
+    let stat: fs.Stats;
+    try {
+      stat = await fsp.stat(abs);
+    } catch {
+      continue;
+    }
+    if (stat.size > GREP_FILE_MAX_BYTES) continue;
+    let text: string;
+    try {
+      text = await fsp.readFile(abs, "utf-8");
+    } catch {
+      continue;
+    }
+    if (text.includes("\u0000")) continue; // binary
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const haystack = caseSensitive ? lines[i]! : lines[i]!.toLowerCase();
+      if (!haystack.includes(needle)) continue;
+      total++;
+      if (matches.length < maxResults) {
+        const line = lines[i]!;
+        matches.push({ path: rel, line: i + 1, text: line.length > 240 ? line.slice(0, 240) + "…" : line.trim() });
+      }
+    }
+  }
+  return { matches, total };
+}
 
 function cleanGitError(message: string): string {
   return message

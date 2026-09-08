@@ -74,3 +74,32 @@ export interface RepoGrepResult {
   matches: RepoGrepMatch[];
   truncated: boolean;
 }
+
+export interface RepoGrepAllOptions {
+  glob?: string;
+  caseSensitive?: boolean;
+  /** Max lines returned per repo (counts stay complete). */
+  maxPerRepo?: number;
+  /** Max lines returned across all repos. */
+  limit?: number;
+}
+
+export interface RepoGrepAllRepo {
+  /** Pass to repo_read_file / repo_list_files / repo_grep to follow up. */
+  handle: string;
+  repo: string;
+  stars: number;
+  branch: string;
+  match_count: number;
+  matches: RepoGrepMatch[];
+  truncated: boolean;
+}
+
+export interface RepoGrepAllResult {
+  query: string;
+  repos_searched: number;
+  total_matches: number;
+  /** Only repos with at least one hit, most-starred first. */
+  repos: RepoGrepAllRepo[];
+  truncated: boolean;
+}
