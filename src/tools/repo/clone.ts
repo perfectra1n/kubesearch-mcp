@@ -26,6 +26,7 @@ export function registerRepoClone(server: McpServer, repos: RepoStore): void {
         expires_in_minutes: z.number(),
         reused: z.boolean(),
         updated: z.boolean(),
+        pinned: z.boolean(),
         tree: z.array(z.string()),
       },
       annotations: { readOnlyHint: false, openWorldHint: true, idempotentHint: false, destructiveHint: false },

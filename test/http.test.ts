@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config.js";
 import { DataStore } from "../src/data/db.js";
 import { RepoStore } from "../src/repo/clone.js";
+import { RepoPool } from "../src/repo/pool.js";
 import { startHttp } from "../src/http.js";
 import { makeFixtureCacheDir } from "./fixtures.js";
 
@@ -39,7 +40,8 @@ async function startTestServer(env: Record<string, string> = {}): Promise<TestSe
   } as NodeJS.ProcessEnv);
   const store = new DataStore(cfg);
   const repos = new RepoStore(cfg.clone, async () => null);
-  const handle = await startHttp(cfg, store, repos);
+  const pool = new RepoPool(cfg.clone.pool, cfg.clone.dir, repos, store, cfg.refreshTtlMs);
+  const handle = await startHttp(cfg, store, repos, pool);
   const { port } = handle.server.address() as AddressInfo;
 
   const server: TestServer = {

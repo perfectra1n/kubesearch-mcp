@@ -13,6 +13,7 @@ const base: CloneConfig = {
   maxConcurrent: 2,
   maxBytes: 100 * 1024 * 1024,
   timeoutMs: 60000,
+  pool: { size: 0, minReleases: 0, repos: [] },
 };
 
 describe("validateCloneUrl", () => {

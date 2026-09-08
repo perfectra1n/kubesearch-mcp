@@ -3,6 +3,7 @@ import { registerRepoTools, registerSearchTools } from "./tools/index.js";
 import { registerPrompts } from "./prompts/index.js";
 import type { DataStore } from "./data/db.js";
 import type { RepoStore } from "./repo/clone.js";
+import type { RepoPool } from "./repo/pool.js";
 import { log } from "./util/log.js";
 
 /**
@@ -30,7 +31,7 @@ function instrumentToolLogging(server: McpServer): void {
   }) as typeof server.registerTool;
 }
 
-function instructions(cloneEnabled: boolean): string {
+function instructions(cloneEnabled: boolean, poolEnabled: boolean): string {
   return (
     `kubesearch-mcp exposes kubesearch.dev — a search engine over Flux HelmReleases and Argo Applications across ` +
     `hundreds of public "home-ops" Kubernetes Git repositories.\n\n` +
@@ -43,20 +44,24 @@ function instructions(cloneEnabled: boolean): string {
     (cloneEnabled
       ? `- repo_clone / repo_list_files / repo_read_file / repo_grep / repo_cleanup: temporarily clone a repo to review its actual manifests.\n`
       : "") +
+    (poolEnabled
+      ? `- repo_grep_all: grep the actual files of the top indexed repos (kept permanently cloned) in one call — any resource kind, not just Helm values.\n`
+      : "") +
     `\nSearch tools page with limit/offset and report has_more.\n` +
     `The prompts (e.g. kubesearch_compare_deployments, kubesearch_pick_image) chain these tools into useful workflows.`
   );
 }
 
-export function buildServer(store: DataStore, repos: RepoStore): McpServer {
+export function buildServer(store: DataStore, repos: RepoStore, pool: RepoPool): McpServer {
   const cloneEnabled = repos.enabled;
+  const poolEnabled = cloneEnabled && pool.enabled;
   const server = new McpServer(
     { name: "kubesearch-mcp", version: "0.1.0" },
-    { capabilities: { tools: {}, prompts: {} }, instructions: instructions(cloneEnabled) },
+    { capabilities: { tools: {}, prompts: {} }, instructions: instructions(cloneEnabled, poolEnabled) },
   );
   instrumentToolLogging(server);
   registerSearchTools(server, store);
-  if (cloneEnabled) registerRepoTools(server, repos);
-  registerPrompts(server, { cloneEnabled });
+  if (cloneEnabled) registerRepoTools(server, repos, pool);
+  registerPrompts(server, { cloneEnabled, poolEnabled });
   return server;
 }

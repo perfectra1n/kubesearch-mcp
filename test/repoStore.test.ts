@@ -4,48 +4,18 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig, type CloneConfig } from "../src/config.js";
-import { RepoStore } from "../src/repo/clone.js";
+import { FakeGitRepoStore } from "./fakeGit.js";
 
 let root: string;
 
-/**
- * A RepoStore whose git calls are replaced by a delay + a file write, so the
- * concurrency and dedupe behaviour can be exercised without git or a network.
- */
-class FakeGitRepoStore extends RepoStore {
-  clones = 0;
-  updates = 0;
-  concurrent = 0;
-  peakConcurrent = 0;
-  delayMs = 25;
-
-  protected override async gitClone(url: string, dir: string): Promise<void> {
-    this.clones++;
-    this.concurrent++;
-    this.peakConcurrent = Math.max(this.peakConcurrent, this.concurrent);
-    try {
-      await new Promise((r) => setTimeout(r, this.delayMs));
-      await fsp.mkdir(dir, { recursive: true });
-      await fsp.writeFile(path.join(dir, "README.md"), `clone of ${url}\n`);
-    } finally {
-      this.concurrent--;
-    }
-  }
-
-  protected override async gitUpdate(): Promise<void> {
-    this.updates++;
-    await new Promise((r) => setTimeout(r, this.delayMs));
-  }
-
-  protected override async currentBranch(_dir: string, fallback: string | null): Promise<string> {
-    return fallback ?? "main";
-  }
-}
-
-function makeStore(overrides: Partial<CloneConfig> = {}): FakeGitRepoStore {
+function makeStore(overrides: Partial<CloneConfig> = {}, indexed: Record<string, { url: string; branch: string }> = {}): FakeGitRepoStore {
   const cfg = loadConfig({ KUBESEARCH_CLONE_DIR: path.join(root, "clones") } as NodeJS.ProcessEnv);
-  return new FakeGitRepoStore({ ...cfg.clone, ...overrides }, async () => null);
+  return new FakeGitRepoStore({ ...cfg.clone, ...overrides }, async (name) => indexed[name] ?? null);
 }
+
+const ONEDR0P = { url: "https://github.com/onedr0p/home-ops", branch: "main" };
+const PIN = { handle: "onedr0p/home-ops", source: "onedr0p/home-ops", ...ONEDR0P, stars: 2819 };
+const poolDir = () => path.join(root, "clones", "pool", "onedr0p__home-ops");
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "ks-repostore-"));
@@ -126,5 +96,103 @@ describe("startup orphan sweep", () => {
 
     expect(fs.existsSync(path.join(root, "clones", result.handle))).toBe(true);
     await store.cleanupAll();
+  });
+});
+
+describe("pinned pool clones", () => {
+  it("clones into the caller's directory under the repo's own name as handle", async () => {
+    const store = makeStore();
+
+    const record = await store.pin({ ...PIN, dir: poolDir() });
+
+    expect(record.handle).toBe("onedr0p/home-ops");
+    expect(record.pinned).toBe(true);
+    expect(store.clones).toBe(1);
+    expect(fs.existsSync(path.join(poolDir(), "README.md"))).toBe(true);
+    await store.cleanupAll();
+  });
+
+  it("adopts an existing working copy with a fetch instead of a fresh clone", async () => {
+    const store = makeStore();
+    await fsp.mkdir(poolDir(), { recursive: true });
+    await fsp.writeFile(path.join(poolDir(), "README.md"), "left over from last run\n");
+
+    await store.pin({ ...PIN, dir: poolDir() });
+
+    expect(store.clones).toBe(0);
+    expect(store.updates).toBe(1);
+  });
+
+  it("serves repo_clone of the same indexed repo from the pinned copy", async () => {
+    const store = makeStore({ refreshOnClone: false }, { "onedr0p/home-ops": ONEDR0P });
+    await store.pin({ ...PIN, dir: poolDir() });
+
+    const result = await store.clone("onedr0p/home-ops");
+
+    expect(result.handle).toBe("onedr0p/home-ops");
+    expect(result.reused).toBe(true);
+    expect(result.pinned).toBe(true);
+    expect(result.expires_in_minutes).toBe(0);
+    expect(store.clones).toBe(1);
+  });
+
+  it("never expires on the idle TTL", async () => {
+    const store = makeStore({ ttlMs: 10 });
+    await store.pin({ ...PIN, dir: poolDir() });
+
+    await new Promise((r) => setTimeout(r, 40));
+
+    await expect(store.list("onedr0p/home-ops")).resolves.toMatchObject({ handle: "onedr0p/home-ops" });
+  });
+
+  it("does not occupy an LRU slot, so ephemeral clones evict each other instead", async () => {
+    const store = makeStore({ maxRepos: 1 });
+    await store.pin({ ...PIN, dir: poolDir() });
+
+    const first = await store.clone("https://example.test/first");
+    await store.clone("https://example.test/second");
+    await new Promise((r) => setTimeout(r, 20)); // eviction rm is fire-and-forget
+
+    await expect(store.list(first.handle)).rejects.toThrow(/Unknown or expired/);
+    await expect(store.list("onedr0p/home-ops")).resolves.toMatchObject({ handle: "onedr0p/home-ops" });
+    await store.cleanupAll();
+  });
+
+  it("refuses repo_cleanup but honours unpin", async () => {
+    const store = makeStore();
+    await store.pin({ ...PIN, dir: poolDir() });
+
+    await expect(store.cleanup("onedr0p/home-ops")).rejects.toThrow(/pinned/);
+    expect(fs.existsSync(poolDir())).toBe(true);
+
+    await store.unpin("onedr0p/home-ops");
+    expect(fs.existsSync(poolDir())).toBe(false);
+    await expect(store.list("onedr0p/home-ops")).rejects.toThrow(/Unknown or expired/);
+  });
+
+  it("survives cleanupAll on shutdown while ephemeral clones are removed", async () => {
+    const store = makeStore();
+    await store.pin({ ...PIN, dir: poolDir() });
+    const ephemeral = await store.clone("https://example.test/ephemeral");
+
+    await store.cleanupAll();
+
+    expect(fs.existsSync(poolDir())).toBe(true);
+    expect(fs.existsSync(path.join(root, "clones", ephemeral.handle))).toBe(false);
+  });
+
+  it("lists pinned records in the order they were pinned", async () => {
+    const store = makeStore();
+    await store.pin({ ...PIN, dir: poolDir() });
+    await store.pin({
+      handle: "b/c",
+      source: "b/c",
+      url: "https://github.com/b/c",
+      branch: null,
+      stars: 1,
+      dir: path.join(root, "clones", "pool", "b__c"),
+    });
+
+    expect(store.pinned().map((r) => r.handle)).toEqual(["onedr0p/home-ops", "b/c"]);
   });
 });

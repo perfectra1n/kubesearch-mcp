@@ -2,6 +2,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { loadConfig } from "./config.js";
 import { DataStore } from "./data/db.js";
 import { RepoStore } from "./repo/clone.js";
+import { RepoPool } from "./repo/pool.js";
 import { buildServer } from "./server.js";
 import { startHttp, type HttpHandle } from "./http.js";
 import { log } from "./util/log.js";
@@ -25,6 +26,10 @@ async function main(): Promise<void> {
     void repos.sweepOrphans().catch((err) => log.warn(`clone sweep failed: ${(err as Error).message}`));
   }
 
+  // Warm the always-cloned pool of top repos in the background (repo_grep_all).
+  const pool = new RepoPool(cfg.clone.pool, cfg.clone.dir, repos, store, cfg.refreshTtlMs);
+  const stopPool = pool.start();
+
   // Begin fetching data immediately so the first request is fast; don't block startup.
   store.ready().then(
     () => log(`data ready (release ${store.currentTag})`),
@@ -47,6 +52,7 @@ async function main(): Promise<void> {
 
     void (async () => {
       stopRefresh();
+      stopPool();
       try {
         await httpHandle?.shutdown();
       } catch (err) {
@@ -65,12 +71,14 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
 
   if (cfg.transport === "http") {
-    httpHandle = await startHttp(cfg, store, repos);
+    httpHandle = await startHttp(cfg, store, repos, pool);
   } else {
-    const server = buildServer(store, repos);
+    const server = buildServer(store, repos, pool);
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    log(`kubesearch-mcp ready on stdio (clone ${cfg.clone.enabled ? "enabled" : "disabled"})`);
+    log(
+      `kubesearch-mcp ready on stdio (clone ${cfg.clone.enabled ? "enabled" : "disabled"}, pool ${pool.enabled ? `${pool.status().size} repos` : "disabled"})`,
+    );
   }
 }
 
