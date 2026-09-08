@@ -6,6 +6,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "./config.js";
 import type { DataStore } from "./data/db.js";
 import type { RepoStore } from "./repo/clone.js";
+import type { RepoPool } from "./repo/pool.js";
 import { buildServer } from "./server.js";
 import { log } from "./util/log.js";
 
@@ -88,7 +89,7 @@ async function readBody(req: http.IncomingMessage, maxBytes: number): Promise<un
  * Start a Streamable HTTP MCP server with in-memory session management, the
  * transport shape standard MCP clients (Claude Code/Desktop) expect over HTTP.
  */
-export function startHttp(cfg: Config, store: DataStore, repos: RepoStore): Promise<HttpHandle> {
+export function startHttp(cfg: Config, store: DataStore, repos: RepoStore, pool: RepoPool): Promise<HttpHandle> {
   const sessions = new Map<string, Session>();
 
   function dropSession(id: string): void {
@@ -216,7 +217,7 @@ export function startHttp(cfg: Config, store: DataStore, repos: RepoStore): Prom
     transport.onclose = () => {
       if (transport.sessionId) dropSession(transport.sessionId);
     };
-    const server = buildServer(store, repos);
+    const server = buildServer(store, repos, pool);
     await server.connect(transport);
     await transport.handleRequest(req, res, body);
   }

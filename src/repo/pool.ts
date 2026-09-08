@@ -28,6 +28,8 @@ export interface PoolStatus {
   /** Configured target size (or the explicit list length). */
   size: number;
   ready: number;
+  /** A sync is in flight; membership and `ready` may still grow (empty `members` means it has not been computed yet). */
+  syncing: boolean;
   members: PoolMemberStatus[];
 }
 
@@ -108,6 +110,7 @@ export class RepoPool {
       enabled: this.enabled,
       size: this.cfg.repos.length > 0 ? this.cfg.repos.length : this.cfg.size,
       ready: members.filter((m) => m.state === "ready").length,
+      syncing: this.inFlight !== null,
       members,
     };
   }

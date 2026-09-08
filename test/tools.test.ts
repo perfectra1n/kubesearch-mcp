@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config.js";
 import { DataStore } from "../src/data/db.js";
 import { RepoStore } from "../src/repo/clone.js";
+import { RepoPool } from "../src/repo/pool.js";
 import { buildServer } from "../src/server.js";
 import { makeFixtureCacheDir } from "./fixtures.js";
 
@@ -22,7 +23,9 @@ beforeAll(async () => {
   store = new DataStore(cfg);
   await store.ready();
   const repos = new RepoStore(cfg.clone, async (name) => store.getRepoByName(name));
-  const server = buildServer(store, repos);
+  // Never started: registers repo_grep_all without cloning anything.
+  const pool = new RepoPool(cfg.clone.pool, cfg.clone.dir, repos, store, cfg.refreshTtlMs);
+  const server = buildServer(store, repos, pool);
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   client = new Client({ name: "kubesearch-mcp-test", version: "0.0.0" });

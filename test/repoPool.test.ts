@@ -131,6 +131,17 @@ describe("RepoPool.sync", () => {
     expect(swapListener).toBeNull();
   });
 
+  it("reports syncing while a sync is in flight, so an early empty result is not mistaken for a final one", async () => {
+    const { pool } = makePool();
+    expect(pool.status()).toMatchObject({ syncing: false, ready: 0 });
+
+    const running = pool.sync();
+    expect(pool.status().syncing).toBe(true);
+
+    await running;
+    expect(pool.status()).toMatchObject({ syncing: false, ready: 2 });
+  });
+
   it("is disabled when size is 0", async () => {
     const { pool, store } = makePool({ size: 0 });
     expect(pool.enabled).toBe(false);

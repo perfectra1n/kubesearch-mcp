@@ -14,7 +14,7 @@ function userPrompt(text: string, description?: string): GetPromptResult {
  * Server-provided prompt templates — reusable workflow shortcuts that chain the
  * search (and, when enabled, repo) tools toward a useful outcome.
  */
-export function registerPrompts(server: McpServer, opts: { cloneEnabled: boolean }): void {
+export function registerPrompts(server: McpServer, opts: { cloneEnabled: boolean; poolEnabled?: boolean }): void {
   server.registerPrompt(
     "kubesearch_compare_deployments",
     {
@@ -68,8 +68,13 @@ export function registerPrompts(server: McpServer, opts: { cloneEnabled: boolean
       userPrompt(
         `Find real-world examples of "${query}" in Helm values across home-ops clusters.\n\n` +
           `1. Call kubesearch_grep_values with query "${query}".\n` +
-          `2. Group the matches by what they're doing, show representative snippets, and link the source files.\n` +
-          `3. Summarize the common patterns and any noteworthy variations.`,
+          (opts.poolEnabled
+            ? `2. Also call repo_grep_all with the same query to see how it appears in full manifests (Kustomizations, ` +
+              `Ingress/HTTPRoute, ExternalSecrets, …) across the most popular repos; use repo_read_file on interesting hits.\n` +
+              `3. Group the matches by what they're doing, show representative snippets, and link the source files.\n` +
+              `4. Summarize the common patterns and any noteworthy variations.`
+            : `2. Group the matches by what they're doing, show representative snippets, and link the source files.\n` +
+              `3. Summarize the common patterns and any noteworthy variations.`),
         `Find examples of ${query}`,
       ),
   );
