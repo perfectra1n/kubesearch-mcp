@@ -49,6 +49,7 @@ export class DataStore {
   private releaseIndexPromise: Promise<ReleaseIndex> | null = null;
   private imageIndexPromise: Promise<ImageIndex> | null = null;
   private buildsInFlight = new Set<Promise<unknown>>();
+  private swapListeners = new Set<() => void>();
   private closed = false;
 
   constructor(private readonly cfg: Config) {}
@@ -209,6 +210,13 @@ export class DataStore {
     this.releaseIndexPromise = null;
     this.imageIndexPromise = null;
     if (old) {
+      for (const listener of this.swapListeners) {
+        try {
+          listener();
+        } catch (err) {
+          log.warn(`swap listener failed: ${(err as Error).message}`);
+        }
+      }
       // An index build may still be streaming rows from the old handle; closing
       // it underneath would abort that build, so wait for the ones in flight.
       const pending = [...this.buildsInFlight];
@@ -267,6 +275,15 @@ export class DataStore {
       });
     }
     return this.imageIndexPromise;
+  }
+
+  /**
+   * Subscribe to dataset swaps (a newer release replacing the open database).
+   * Not fired for the initial load — `ready()` covers that. Returns unsubscribe.
+   */
+  onSwap(listener: () => void): () => void {
+    this.swapListeners.add(listener);
+    return () => this.swapListeners.delete(listener);
   }
 
   get database(): Database.Database {

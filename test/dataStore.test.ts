@@ -4,7 +4,7 @@ import Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadConfig, type Config } from "../src/config.js";
 import { DataStore } from "../src/data/db.js";
-import { makeFixtureCacheDir } from "./fixtures.js";
+import { makeFixtureCacheDir, writeFixtureData } from "./fixtures.js";
 
 const HOUR = 3600_000;
 const MINUTE = 60_000;
@@ -246,5 +246,27 @@ describe("DataStore", () => {
     await store.ready();
 
     expect(fs.existsSync(stale)).toBe(false);
+  });
+});
+
+describe("DataStore.onSwap", () => {
+  it("notifies listeners when a newer release replaces the open database, not on first load", async () => {
+    const { cacheDir, cleanup } = makeFixtureCacheDir("test");
+    writeFixtureData(path.join(cacheDir, "repos-test2.db"), path.join(cacheDir, "repos-extended-test2.db"));
+    const store = new DataStore(testConfig(cacheDir));
+    cleanups.push(() => store.close(), cleanup);
+    let swaps = 0;
+    const off = store.onSwap(() => swaps++);
+
+    await store.ready();
+    expect(swaps).toBe(0);
+
+    (store as unknown as { open(tag: string): void }).open("test2");
+    expect(swaps).toBe(1);
+    expect(store.currentTag).toBe("test2");
+
+    off();
+    (store as unknown as { open(tag: string): void }).open("test");
+    expect(swaps).toBe(1);
   });
 });

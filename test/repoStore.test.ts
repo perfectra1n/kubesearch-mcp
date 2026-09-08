@@ -4,43 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig, type CloneConfig } from "../src/config.js";
-import { RepoStore } from "../src/repo/clone.js";
+import { FakeGitRepoStore } from "./fakeGit.js";
 
 let root: string;
-
-/**
- * A RepoStore whose git calls are replaced by a delay + a file write, so the
- * concurrency and dedupe behaviour can be exercised without git or a network.
- */
-class FakeGitRepoStore extends RepoStore {
-  clones = 0;
-  updates = 0;
-  concurrent = 0;
-  peakConcurrent = 0;
-  delayMs = 25;
-
-  protected override async gitClone(url: string, dir: string): Promise<void> {
-    this.clones++;
-    this.concurrent++;
-    this.peakConcurrent = Math.max(this.peakConcurrent, this.concurrent);
-    try {
-      await new Promise((r) => setTimeout(r, this.delayMs));
-      await fsp.mkdir(dir, { recursive: true });
-      await fsp.writeFile(path.join(dir, "README.md"), `clone of ${url}\n`);
-    } finally {
-      this.concurrent--;
-    }
-  }
-
-  protected override async gitUpdate(): Promise<void> {
-    this.updates++;
-    await new Promise((r) => setTimeout(r, this.delayMs));
-  }
-
-  protected override async currentBranch(_dir: string, fallback: string | null): Promise<string> {
-    return fallback ?? "main";
-  }
-}
 
 function makeStore(overrides: Partial<CloneConfig> = {}, indexed: Record<string, { url: string; branch: string }> = {}): FakeGitRepoStore {
   const cfg = loadConfig({ KUBESEARCH_CLONE_DIR: path.join(root, "clones") } as NodeJS.ProcessEnv);
