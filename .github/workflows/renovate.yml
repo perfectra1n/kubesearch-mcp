@@ -1,0 +1,105 @@
+name: Renovate
+
+# Self-hosted Renovate on a 12-hour cadence. Repos inside the home-operations org
+# dispatch to that org's shared Renovate runner; this repo lives outside it, so it
+# runs Renovate itself against the same policy (.renovaterc.json5 extends
+# home-operations/renovate-config).
+#
+# It authenticates as a GitHub App rather than with GITHUB_TOKEN: GitHub never
+# triggers workflows from events made with the workflow token, so CI would not run
+# on Renovate PRs and the preset's automerge (which waits for green checks) could
+# never fire. Setup: install the App on this repo and add two secrets,
+# RENOVATE_APP_CLIENT_ID (the App's client ID; the numeric App ID also works) and
+# RENOVATE_APP_PRIVATE_KEY (the App's .pem).
+
+on:
+  schedule:
+    # Every 12 hours. Off the hour on purpose: GitHub queues :00 crons behind
+    # everyone else's, and a delayed start is the common cause of "skipped" runs.
+    - cron: "17 */12 * * *"
+  push:
+    branches: [master, main]
+    paths: [.renovaterc.json5]
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: Renovate log level
+        default: info
+        type: choice
+        options: [info, debug, trace]
+      dryRun:
+        description: Dry run (log what would change, open nothing)
+        default: false
+        type: boolean
+  # Dependency Dashboard checkboxes (rebase all, approve majors, create rate-limited
+  # PRs) and the per-PR rebase checkbox only take effect on the next Renovate run;
+  # reacting to the edit makes them feel immediate instead of up to 12 hours late.
+  issues:
+    types: [edited]
+  pull_request:
+    types: [closed, edited]
+
+permissions: {}
+
+# One run at a time, never cancelled: a run killed mid-PR-creation leaves half-made
+# branches behind. Extra triggers queue instead.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  renovate:
+    name: Renovate
+    # The issue/PR triggers must ignore Renovate's own edits (the bot rewriting its
+    # dashboard, closing its PRs) or every run would schedule the next one.
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (
+        !endsWith(github.actor, '[bot]') &&
+        (
+          (
+            github.event_name == 'issues' &&
+            contains(github.event.issue.title, 'Renovate Dashboard') &&
+            (
+              contains(github.event.issue.body, '- [x]') ||
+              contains(github.event.issue.body, 'approve-all-pending-prs') ||
+              contains(github.event.issue.body, 'create-all-rate-limited-prs') ||
+              contains(github.event.issue.body, 'rebase-all-open-prs')
+            )
+          ) ||
+          (
+            github.event_name == 'pull_request' &&
+            startsWith(github.event.pull_request.head.ref, 'renovate/') &&
+            (
+              github.event.action == 'closed' ||
+              contains(github.event.pull_request.body, '- [x]')
+            )
+          )
+        )
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+
+      # No checkout: Renovate clones the repo itself and reads .renovaterc.json5 from
+      # that clone. Renovate detects the App installation token and derives the bot
+      # username and gitAuthor from it.
+      - name: Run Renovate
+        uses: renovatebot/github-action@37beffda261423addd537c33f2d126df7f6ffbab # v46.2.6
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          # The action's own version tracks the Renovate CLI only loosely, so the CLI
+          # is pinned here and kept current by the preset's annotated-dependency manager.
+          # renovate: datasource=docker depName=ghcr.io/renovatebot/renovate
+          renovate-version: 44.69.11
+        env:
+          RENOVATE_REPOSITORIES: '["${{ github.repository }}"]'
+          RENOVATE_DRY_RUN: ${{ inputs.dryRun && 'full' || '' }}
+          LOG_LEVEL: ${{ inputs.logLevel || 'info' }}

@@ -1,0 +1,31 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  // The shared home-operations preset supplies the whole policy: config:recommended,
+  // GitHub Action digest pinning, mise/npm/Docker semantic commits and type/* labels,
+  // the dependency dashboard, monthly npm lockfile maintenance, and automerge for
+  // dev-tool bumps (lefthook, shellcheck). It is referenced as `github>` rather than
+  // `local>` because this repo lives outside the home-operations org. The run itself
+  // is .github/workflows/renovate.yml.
+  extends: ["github>home-operations/renovate-config"],
+  packageRules: [
+    {
+      // .mise/config.toml pins Node in step with the Dockerfile base image, so a
+      // major bump should land as one PR that CI exercises as a pair. Minor/patch
+      // bumps only ever touch the mise pin (the image tag floats within its major).
+      description: "Node toolchain: bump the mise pin and the Docker base image together",
+      matchManagers: ["mise", "dockerfile"],
+      matchDepNames: ["node", "aqua:nodejs/node"],
+      groupName: "Node toolchain",
+      groupSlug: "node-toolchain",
+    },
+    {
+      // package.json engines.node is the minimum supported runtime, not a pin. The
+      // preset's npm rangeStrategy=bump would rewrite `>=20` to the newest major and
+      // silently drop every older runtime from the support range.
+      description: "Never bump engines.node",
+      matchManagers: ["npm"],
+      matchDepTypes: ["engines"],
+      enabled: false,
+    },
+  ],
+}
