@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0](https://github.com/perfectra1n/kubesearch-mcp/compare/v1.2.0...v1.3.0) (2026-09-09)
+
+
+### Features
+
+* **renovate:** implement renovate ([13d9163](https://github.com/perfectra1n/kubesearch-mcp/commit/13d9163b9bb75025cc85867864debbc331006e7d))
+* **renovate:** implement renovate ([cd849d9](https://github.com/perfectra1n/kubesearch-mcp/commit/cd849d9429cc7907ad1e15ef31a823453edf668d))
+
 ## [1.2.0](https://github.com/perfectra1n/kubesearch-mcp/compare/v1.1.0...v1.2.0) (2026-09-08)
 
 
