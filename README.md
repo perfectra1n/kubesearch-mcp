@@ -289,6 +289,12 @@ test vectors so generated `/hr/<id>` links match the real site.
 `typecheck` and `test` run on every push and pull request, and the container image is
 only published if they pass.
 
+[Renovate](https://docs.renovatebot.com) keeps dependencies current: `.github/workflows/renovate.yml`
+runs it every 12 hours (and on dependency-dashboard or PR checkbox edits) with the policy in
+`.renovaterc.json5`, which extends the shared
+[home-operations/renovate-config](https://github.com/home-operations/renovate-config) preset.
+It authenticates as a GitHub App so that CI runs on the PRs it opens.
+
 ## Credits
 
 All data comes from [kubesearch.dev](https://kubesearch.dev) /
