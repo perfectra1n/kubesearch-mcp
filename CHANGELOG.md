@@ -5,19 +5,16 @@
 
 ### Features
 
-* **renovate:** implement renovate ([13d9163](https://github.com/perfectra1n/kubesearch-mcp/commit/13d9163b9bb75025cc85867864debbc331006e7d))
 * **renovate:** implement renovate ([cd849d9](https://github.com/perfectra1n/kubesearch-mcp/commit/cd849d9429cc7907ad1e15ef31a823453edf668d))
 
 
 ### Bug Fixes
 
-* **data:** wait for both downloads to settle before rejecting ([375af81](https://github.com/perfectra1n/kubesearch-mcp/commit/375af81c06b046020dcfd0dddb36a18f8984a03d))
 * **data:** wait for both downloads to settle before rejecting ([9f4d257](https://github.com/perfectra1n/kubesearch-mcp/commit/9f4d2571286a41cabd48c46a1cb0432a08cd9e5d))
 
 
 ### Continuous Integration
 
-* target main, move off deprecated Node 20 actions ([4c85841](https://github.com/perfectra1n/kubesearch-mcp/commit/4c85841aeac214c883ca9f5b8caaf7bee4967b66))
 * target main, move off deprecated Node 20 actions ([5c028a4](https://github.com/perfectra1n/kubesearch-mcp/commit/5c028a42e48a3247d2d4ad897d2accd26b500a4e))
 
 
