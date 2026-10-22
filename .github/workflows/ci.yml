@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, main]
+    branches: [main]
   pull_request:
   workflow_call:
 
@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # mise pins the toolchain and defines the tasks below, so every step here
       # is the same command a developer runs locally. mise itself is pinned so the
