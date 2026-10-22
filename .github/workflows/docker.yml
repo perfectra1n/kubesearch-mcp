@@ -6,7 +6,7 @@ name: Build Docker image
 # not run workflows on GITHUB_TOKEN-authored events.
 on:
   push:
-    branches: [master, main]
+    branches: [main]
     paths-ignore: ["**.md", "LICENSE"]
   pull_request:
     paths-ignore: ["**.md", "LICENSE"]
@@ -25,7 +25,7 @@ on:
         type: string
         default: ""
 
-# Merging the release PR pushes to master, which starts a plain branch build at
+# Merging the release PR pushes to main, which starts a plain branch build at
 # the same time release-please calls this workflow for the tag. Keying the group
 # on the tag as well keeps those two runs from cancelling each other.
 concurrency:
@@ -49,7 +49,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Empty on branch/PR builds, where checkout falls back to the
           # triggering ref; set on the release path so the image is built from
@@ -78,7 +78,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           # The semver patterns read `inputs.tag` rather than the git ref: on the
           # release path this workflow is called from a branch push, so the ref
-          # is refs/heads/master and bare `type=semver` would extract nothing.
+          # is refs/heads/main and bare `type=semver` would extract nothing.
           # `enable=` switches them off entirely for branch/PR builds.
           tags: |
             type=ref,event=branch

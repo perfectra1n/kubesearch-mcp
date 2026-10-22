@@ -18,7 +18,7 @@ on:
     # everyone else's, and a delayed start is the common cause of "skipped" runs.
     - cron: "17 */12 * * *"
   push:
-    branches: [master, main]
+    branches: [main]
     paths: [.renovaterc.json5]
   workflow_dispatch:
     inputs:
