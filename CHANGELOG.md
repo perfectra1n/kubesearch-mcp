@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.3.0](https://github.com/perfectra1n/kubesearch-mcp/compare/v1.2.0...v1.3.0) (2026-10-22)
+
+
+### Features
+
+* **renovate:** implement renovate ([cd849d9](https://github.com/perfectra1n/kubesearch-mcp/commit/cd849d9429cc7907ad1e15ef31a823453edf668d))
+
+
+### Bug Fixes
+
+* **data:** wait for both downloads to settle before rejecting ([9f4d257](https://github.com/perfectra1n/kubesearch-mcp/commit/9f4d2571286a41cabd48c46a1cb0432a08cd9e5d))
+
+
+### Continuous Integration
+
+* target main, move off deprecated Node 20 actions ([5c028a4](https://github.com/perfectra1n/kubesearch-mcp/commit/5c028a42e48a3247d2d4ad897d2accd26b500a4e))
+
+
+### Miscellaneous Chores
+
+* **data:** escape the NUL in the SQLite magic string ([3873c52](https://github.com/perfectra1n/kubesearch-mcp/commit/3873c52f10e3cd7f4098169fcfb7d3eb56e7bb21))
+
 ## [1.2.0](https://github.com/perfectra1n/kubesearch-mcp/compare/v1.1.0...v1.2.0) (2026-09-08)
 
 
