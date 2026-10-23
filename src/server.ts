@@ -36,11 +36,11 @@ function instructions(cloneEnabled: boolean, poolEnabled: boolean): string {
     `kubesearch-mcp exposes kubesearch.dev — a search engine over Flux HelmReleases and Argo Applications across ` +
     `hundreds of public "home-ops" Kubernetes Git repositories.\n\n` +
     `Use it to discover how the community deploys software on Kubernetes:\n` +
-    `- kubesearch_search_releases: find charts by name and see who deploys them.\n` +
-    `- kubesearch_get_release: drill into one chart for every deployment and its values.\n` +
-    `- kubesearch_search_images: find container image repositories and the tags used in the wild.\n` +
-    `- kubesearch_grep_values: full-text grep across real-world Helm values for config examples.\n` +
-    `- kubesearch_status: check how fresh the cached data is.\n` +
+    `- search_releases: find charts by name and see who deploys them.\n` +
+    `- get_release: drill into one chart for every deployment and its values.\n` +
+    `- search_images: find container image repositories and the tags used in the wild.\n` +
+    `- grep_values: full-text grep across real-world Helm values for config examples.\n` +
+    `- status: check how fresh the cached data is.\n` +
     (cloneEnabled
       ? `- repo_clone / repo_list_files / repo_read_file / repo_grep / repo_cleanup: temporarily clone a repo to review its actual manifests.\n`
       : "") +

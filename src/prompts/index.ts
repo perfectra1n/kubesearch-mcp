@@ -25,11 +25,11 @@ export function registerPrompts(server: McpServer, opts: { cloneEnabled: boolean
     ({ chart }) =>
       userPrompt(
         `Compare how popular home-ops repositories deploy the "${chart}" Helm chart.\n\n` +
-          `1. Call kubesearch_search_releases with query "${chart}" and note the top result ids (most-deployed first).\n` +
-          `2. For the top 2-3 ids, call kubesearch_get_release (default view: "summary") to get the community config ` +
+          `1. Call search_releases with query "${chart}" and note the top result ids (most-deployed first).\n` +
+          `2. For the top 2-3 ids, call get_release (default view: "summary") to get the community config ` +
           `digest — the most commonly-set spec.values paths, their typical values, and a couple of example configs.\n` +
           `3. Compare those digests: versions, key settings, resource limits, ingress, persistence; call out notable or ` +
-          `unusual choices. Only when a difference needs detail, drill in with kubesearch_get_release view: "values" ` +
+          `unusual choices. Only when a difference needs detail, drill in with get_release view: "values" ` +
           `(narrow with repo and/or value_paths) instead of pulling every deployment's full values.\n` +
           `4. Recommend a sensible baseline configuration, citing the source repos and their kubesearch.dev links.`,
         `Compare deployments of ${chart}`,
@@ -46,9 +46,9 @@ export function registerPrompts(server: McpServer, opts: { cloneEnabled: boolean
     ({ chart }) =>
       userPrompt(
         `I want to deploy "${chart}" on my Flux-managed Kubernetes cluster the way the community does.\n\n` +
-          `1. Use kubesearch_search_releases for "${chart}" to find the most common chart source (OCI/HelmRepository) ` +
+          `1. Use search_releases for "${chart}" to find the most common chart source (OCI/HelmRepository) ` +
           `and the most-used release id.\n` +
-          `2. Use kubesearch_get_release (default view: "summary") on the top id to see the common settings and a couple ` +
+          `2. Use get_release (default view: "summary") on the top id to see the common settings and a couple ` +
           `of real example configs. If you need a full reference config, drill in with view: "values" (narrow with ` +
           `repo and/or value_paths) rather than dumping every deployment.\n` +
           `3. Draft a clean HelmRelease (and HelmRepository/OCIRepository if needed) with sensible values, ` +
@@ -67,7 +67,7 @@ export function registerPrompts(server: McpServer, opts: { cloneEnabled: boolean
     ({ query }) =>
       userPrompt(
         `Find real-world examples of "${query}" in Helm values across home-ops clusters.\n\n` +
-          `1. Call kubesearch_grep_values with query "${query}".\n` +
+          `1. Call grep_values with query "${query}".\n` +
           (opts.poolEnabled
             ? `2. Also call repo_grep_all with the same query to see how it appears in full manifests (Kustomizations, ` +
               `Ingress/HTTPRoute, ExternalSecrets, …) across the most popular repos; use repo_read_file on interesting hits.\n` +
@@ -89,9 +89,9 @@ export function registerPrompts(server: McpServer, opts: { cloneEnabled: boolean
     ({ app }) =>
       userPrompt(
         `Work out which container image and tag to run for "${app}", based on what home-ops clusters actually use.\n\n` +
-          `1. Call kubesearch_search_images with query "${app}". The results are ranked by usage_count — note the ` +
+          `1. Call search_images with query "${app}". The results are ranked by usage_count — note the ` +
           `dominant repository, its popular tags, and the sample_repos running it.\n` +
-          `2. Call kubesearch_search_releases with query "${app}" and kubesearch_get_release (view: "summary") on the ` +
+          `2. Call search_releases with query "${app}" and get_release (view: "summary") on the ` +
           `top result to see how charts wire that image up (image.repository / image.tag values).\n` +
           `3. Recommend a repository and a tag-pinning approach — a pinned semver tag, a digest, or a floating tag — ` +
           `and say which the sample repos chose. Flag it if usage is split across several repositories, since that ` +

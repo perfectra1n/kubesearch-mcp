@@ -5,7 +5,7 @@ import { ok, READ_ONLY } from "../helpers.js";
 
 export function registerStatus(server: McpServer, store: DataStore): void {
   server.registerTool(
-    "kubesearch_status",
+    "status",
     {
       title: "Kubesearch data status",
       description:

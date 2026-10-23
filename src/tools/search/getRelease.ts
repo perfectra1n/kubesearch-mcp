@@ -81,11 +81,11 @@ export function buildValuesPage(
 
 export function registerGetRelease(server: McpServer, store: DataStore): void {
   server.registerTool(
-    "kubesearch_get_release",
+    "get_release",
     {
       title: "Get HelmRelease details",
       description:
-        "Get details for one chart by its kubesearch.dev release id (the `id` from `kubesearch_search_releases`, e.g. " +
+        "Get details for one chart by its kubesearch.dev release id (the `id` from `search_releases`, e.g. " +
         "'ghcr.io-home-operations-charts-mirror-cert-manager'). Three views, controlled by `view`:\n" +
         "- `summary` (default): a compact digest of how the community configures the chart — the most commonly-set " +
         "`spec.values` paths with their typical values, plus a couple of full example configs. Start here.\n" +
@@ -205,9 +205,7 @@ export function registerGetRelease(server: McpServer, store: DataStore): void {
       const index = await store.getReleaseIndex();
       const group = index.groups.get(id);
       if (!group) {
-        return fail(
-          `No HelmRelease found with id "${id}". Use kubesearch_search_releases to find a valid id (the "id" field of each result).`,
-        );
+        return fail(`No HelmRelease found with id "${id}". Use search_releases to find a valid id (the "id" field of each result).`);
       }
 
       const base = {

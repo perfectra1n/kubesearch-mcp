@@ -12,7 +12,7 @@ export function registerRepoGrepAll(server: McpServer, repos: RepoStore, pool: R
       description:
         "Substring-search the actual files of the most popular indexed home-ops repositories at once — no clone step " +
         "needed. The server keeps these repos permanently cloned, so this covers every resource kind (Kustomizations, " +
-        "Ingress/HTTPRoute, ExternalSecrets, Talos configs, …), not just Helm values like `kubesearch_grep_values`. " +
+        "Ingress/HTTPRoute, ExternalSecrets, Talos configs, …), not just Helm values like `grep_values`. " +
         "Hits are grouped by repo, most-starred first, and each group carries a `handle` you can pass straight to " +
         "`repo_read_file` / `repo_list_files` / `repo_grep` for the follow-up. `pool` reports which repos were " +
         "searchable: while `pool.syncing` is true and `ready` is below `size` the pool is still warming up, so an empty " +

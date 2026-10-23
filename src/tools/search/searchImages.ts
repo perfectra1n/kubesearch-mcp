@@ -7,7 +7,7 @@ import { ok, READ_ONLY, uniq } from "../helpers.js";
 
 export function registerSearchImages(server: McpServer, store: DataStore): void {
   server.registerTool(
-    "kubesearch_search_images",
+    "search_images",
     {
       title: "Search container images",
       description:
