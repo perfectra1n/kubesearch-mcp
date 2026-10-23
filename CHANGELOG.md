@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/perfectra1n/kubesearch-mcp/compare/v1.3.0...v2.0.0) (2026-10-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* the search tools are renamed. Clients and permission rules that reference the old names must be updated: kubesearch_search_releases -> search_releases, kubesearch_get_release -> get_release, kubesearch_search_images -> search_images, kubesearch_grep_values -> grep_values, kubesearch_status -> status. Prompt names and the kubesearch_url result field are unchanged.
+
+### Features
+
+* drop kubesearch_ prefix from search tool names ([3afedb3](https://github.com/perfectra1n/kubesearch-mcp/commit/3afedb32b1edd54399f63fb10adc03b666b6a5c6))
+
 ## [1.3.0](https://github.com/perfectra1n/kubesearch-mcp/compare/v1.2.0...v1.3.0) (2026-10-22)
 
 
