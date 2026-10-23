@@ -7,14 +7,14 @@ import { ok, READ_ONLY } from "../helpers.js";
 
 export function registerSearchReleases(server: McpServer, store: DataStore): void {
   server.registerTool(
-    "kubesearch_search_releases",
+    "search_releases",
     {
       title: "Search HelmReleases",
       description:
         "Search kubesearch.dev for Flux HelmReleases / Argo Applications by chart name (substring, case-insensitive). " +
         "Mirrors the kubesearch.dev homepage search (e.g. 'cert-manager'). Results are grouped by chart source and " +
         "ranked by how many public home-ops repos deploy them. Each result includes an `id` you can pass to " +
-        "`kubesearch_get_release` for full details, plus a kubesearch.dev link.\n" +
+        "`get_release` for full details, plus a kubesearch.dev link.\n" +
         "Note: `chart_source_url` is a NORMALIZED grouping key (it matches kubesearch.dev's `/hr/<id>` grouping and " +
         "intentionally collapses related registries, e.g. all bjw-s variants into 'oci://ghcr.io/bjw-s-labs/charts/'). " +
         "For `chartRef`/OCIRepository releases the actual pullable chart is in `source_urls` (group) and each repo's " +
@@ -70,7 +70,7 @@ export function registerSearchReleases(server: McpServer, store: DataStore): voi
                 resolved_chart: z.string().nullable(),
               }),
             ),
-            more_repos: z.number().describe("Deployments beyond the shown top_repos — fetch them with kubesearch_get_release."),
+            more_repos: z.number().describe("Deployments beyond the shown top_repos — fetch them with get_release."),
           }),
         ),
       },

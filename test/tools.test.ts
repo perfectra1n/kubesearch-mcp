@@ -44,7 +44,7 @@ function textOf(result: unknown): string {
 
 describe("tool response envelope", () => {
   it("serializes text compactly and equivalently to structuredContent", async () => {
-    const result = await client.callTool({ name: "kubesearch_search_releases", arguments: { query: "cert-manager" } });
+    const result = await client.callTool({ name: "search_releases", arguments: { query: "cert-manager" } });
     const text = textOf(result);
 
     expect(text).not.toContain("\n");
@@ -60,7 +60,7 @@ describe("tool response envelope", () => {
   });
 
   it("reports a failed tool call as an error result rather than throwing", async () => {
-    const result = await client.callTool({ name: "kubesearch_get_release", arguments: { id: "does-not-exist" } });
+    const result = await client.callTool({ name: "get_release", arguments: { id: "does-not-exist" } });
     expect(result.isError).toBe(true);
     expect(textOf(result)).toMatch(/does-not-exist/);
   });
@@ -74,12 +74,12 @@ describe("prompts", () => {
     const prompt = await client.getPrompt({ name: "kubesearch_pick_image", arguments: { app: "postgres" } });
     const text = (prompt.messages[0]!.content as { text: string }).text;
     expect(text).toContain("postgres");
-    expect(text).toContain("kubesearch_search_images");
+    expect(text).toContain("search_images");
   });
 
   it("steers the summary view toward the cheap drill-down", async () => {
     const result = await client.callTool({
-      name: "kubesearch_get_release",
+      name: "get_release",
       arguments: { id: "charts.jetstack.io-cert-manager", view: "summary" },
     });
     const body = result.structuredContent as { next_step: string };
@@ -89,7 +89,7 @@ describe("prompts", () => {
 
 describe("search tools over fixture data", () => {
   it("finds the cert-manager release group", async () => {
-    const result = await client.callTool({ name: "kubesearch_search_releases", arguments: { query: "cert-manager" } });
+    const result = await client.callTool({ name: "search_releases", arguments: { query: "cert-manager" } });
     const body = result.structuredContent as { total_matches: number; results: Array<{ id: string }> };
     expect(body.total_matches).toBeGreaterThan(0);
     expect(body.results.some((r) => r.id.includes("cert-manager"))).toBe(true);
@@ -97,7 +97,7 @@ describe("search tools over fixture data", () => {
 
   it("echoes which repos a values-view filter actually resolved to", async () => {
     const result = await client.callTool({
-      name: "kubesearch_get_release",
+      name: "get_release",
       arguments: { id: "charts.jetstack.io-cert-manager", view: "values", repo: "carpenike" },
     });
     const body = result.structuredContent as { matched_repos: string[] };
@@ -106,7 +106,7 @@ describe("search tools over fixture data", () => {
 
   it("greps values and reports paging state", async () => {
     const result = await client.callTool({
-      name: "kubesearch_grep_values",
+      name: "grep_values",
       arguments: { query: "installCRDs", limit: 1 },
     });
     const body = result.structuredContent as { total_files: number; shown: number; has_more: boolean };

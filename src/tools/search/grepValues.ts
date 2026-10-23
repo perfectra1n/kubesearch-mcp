@@ -7,7 +7,7 @@ import { ok, READ_ONLY } from "../helpers.js";
 
 export function registerGrepValues(server: McpServer, store: DataStore): void {
   server.registerTool(
-    "kubesearch_grep_values",
+    "grep_values",
     {
       title: "Grep HelmRelease values",
       description:

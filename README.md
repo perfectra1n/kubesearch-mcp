@@ -10,13 +10,13 @@ clone a repo so the model can review its actual manifests.
 
 ### Search tools
 
-| Tool                         | kubesearch.dev equivalent    | What it does                                                                                                                                                                             |
-| ---------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kubesearch_search_releases` | `/#cert-manager`             | Find charts by name; see who deploys them, ranked by popularity.                                                                                                                         |
-| `kubesearch_get_release`     | `/hr/<id>`                   | One chart's deployments. `view: "summary"` (default) digests the common `spec.values`; `view: "deployments"` paginates the repo list; `view: "values"` drills into a repo's full config. |
-| `kubesearch_search_images`   | `/image#image cert-manager`  | Container image repositories and the tags used in the wild.                                                                                                                              |
-| `kubesearch_grep_values`     | `/grep#grep cert-manager.io` | Full-text grep across real-world Helm values for config examples.                                                                                                                        |
-| `kubesearch_status`          | —                            | Report the cached data's release date and row counts.                                                                                                                                    |
+| Tool              | kubesearch.dev equivalent    | What it does                                                                                                                                                                             |
+| ----------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_releases` | `/#cert-manager`             | Find charts by name; see who deploys them, ranked by popularity.                                                                                                                         |
+| `get_release`     | `/hr/<id>`                   | One chart's deployments. `view: "summary"` (default) digests the common `spec.values`; `view: "deployments"` paginates the repo list; `view: "values"` drills into a repo's full config. |
+| `search_images`   | `/image#image cert-manager`  | Container image repositories and the tags used in the wild.                                                                                                                              |
+| `grep_values`     | `/grep#grep cert-manager.io` | Full-text grep across real-world Helm values for config examples.                                                                                                                        |
+| `status`          | —                            | Report the cached data's release date and row counts.                                                                                                                                    |
 
 All search tools are annotated read-only and return a typed `structuredContent`
 payload alongside the equivalent text. They page with `limit`/`offset` and report
@@ -58,7 +58,7 @@ Concurrent `repo_clone` calls for the same repo share a single `git` invocation,
 `KUBESEARCH_CLONE_MAX_CONCURRENT` git subprocesses run at once, and clone directories
 stranded by an ungraceful restart are reaped at startup.
 
-**Always-warm pool (`repo_grep_all`).** `kubesearch_grep_values` only sees Helm `spec.values`
+**Always-warm pool (`repo_grep_all`).** `grep_values` only sees Helm `spec.values`
 — that is all the upstream dataset contains. To grep across _every_ resource kind
 (Kustomizations, HTTPRoutes, ExternalSecrets, Talos configs, …) the server keeps the
 `KUBESEARCH_POOL_SIZE` (default 15) most-starred indexed repos permanently cloned and
